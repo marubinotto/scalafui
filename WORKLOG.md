@@ -28,3 +28,12 @@ Test:
 $ yarn
 $ yarn run dev
 ```
+
+## Introduce Scala.js
+
+1. Add Scala.js specific entries to `.gitignore`
+2. Add project settings and build.sbt
+    * `project/build.properties`
+    * `project/plugins.sbt`
+    * `build.sbt`
+    

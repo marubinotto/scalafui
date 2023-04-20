@@ -22,3 +22,26 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# sbt specific
+.cache
+.cache-main
+.cache-tests
+.history
+.lib/
+.bsp/
+dist/*
+target/
+lib_managed/
+src_managed/
+project/boot/
+project/project/
+project/plugins/project/
+
+# VSCode and Metals
+# https://scalameta.org/metals/docs/editors/vscode.html#files-and-directories-to-include-in-your-gitignore
+.vscode/
+.metals/
+.bloop/
+.ammonite/
+metals.sbt

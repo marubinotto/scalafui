@@ -39,4 +39,5 @@ $ yarn run dev
 3. Add Scala.js source files
     * `src/main/scala/scalafui/FunctionalUI.scala`
     * `src/main/scala/scalafui/Main.scala`
+4. Add `vite.config.js`
 

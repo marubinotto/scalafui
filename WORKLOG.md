@@ -50,5 +50,6 @@ $ yarn run dev
         * `public/vite.svg`
 7. Test the app
     * `$ yarn`
+    * `sbt> ~fastLinkJS`
     * `$ yarn run dev`
 

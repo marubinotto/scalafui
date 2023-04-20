@@ -53,3 +53,17 @@ $ yarn run dev
     * `sbt> ~fastLinkJS`
     * `$ yarn run dev`
 
+### Sourcemap errors 
+
+With Vite v4.2.2, sourcemap errors will be output in the console like below when launching a dev server.
+
+```
+Sourcemap for "/path/to/scalafui/target/scala-2.13/scalafui-fastopt/scalafui.Main.js" points to missing source files
+```
+
+According to the debug log output by `DEBUG="vite:sourcemap" yarn dev`, Vite doesn't seem to properly handle absolute source URLs (starting with `file:`, `https:`) in *.map files. It treats sources as relative paths from the source directory unconditionally like:
+
+```
+vite:sourcemap   /path/to/scalafui/target/scala-2.13/scalafui-fastopt/https:/raw.githubusercontent.com/scala-js/scala-js/v1.13.1/library-aux/src/main/scala/scala/runtime/Statics.scala
+```
+

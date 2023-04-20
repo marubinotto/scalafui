@@ -36,4 +36,7 @@ $ yarn run dev
     * `project/build.properties`
     * `project/plugins.sbt`
     * `build.sbt`
-    
+3. Add Scala.js source files
+    * `src/main/scala/scalafui/FunctionalUI.scala`
+    * `src/main/scala/scalafui/Main.scala`
+

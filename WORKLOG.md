@@ -1,6 +1,12 @@
 # Work log
 
-## Generate an empty Vite project
+## Scala.js and Vite
+
+* [Getting Started with Scala\.js and Vite \- Scala\.js](https://www.scala-js.org/doc/tutorial/scalajs-vite.html)
+* [sjrd/scalajs\-sbt\-vite\-laminar\-chartjs\-example at scalajs\-vite\-end\-state](https://github.com/sjrd/scalajs-sbt-vite-laminar-chartjs-example/tree/scalajs-vite-end-state)
+* [Getting Started with Scala\.js and Vite \| Let´s talk about Scala 3 \- YouTube](https://www.youtube.com/watch?v=dv7fPmgFTNA)
+
+### Generate an empty Vite project
 
 ```shell
 $ node -v
@@ -29,7 +35,7 @@ $ yarn
 $ yarn run dev
 ```
 
-## Introduce Scala.js
+### Introduce Scala.js
 
 1. Add Scala.js specific entries to `.gitignore`
 2. Add project settings and build.sbt

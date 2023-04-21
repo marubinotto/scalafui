@@ -1,0 +1,131 @@
+body {
+  margin: 0;
+  padding: 0;
+  font: 13px Verdana, Helvetica, Arial, sans-serif
+}
+
+h1,
+h2,
+h3 {
+  text-align: center;
+}
+
+input[type=text] {
+  height: 30px;
+  padding: 6px 10px;
+  background-color: #fff;
+  border: 1px solid #d1d1d1;
+  border-radius: 4px;
+  box-shadow: none;
+  box-sizing: border-box;
+}
+
+button {
+  display: inline-block;
+  height: 30px;
+  padding: 0 20px;
+  color: #555;
+  text-align: center;
+  line-height: 30px;
+  white-space: nowrap;
+  background-color: transparent;
+  border-radius: 4px;
+  border: 1px solid #bbb;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+button[disabled],
+button[disabled]:hover {
+  color: #fff;
+  background: #ccc !important;
+  border-color: #ccc !important;
+  text-shadow: none !important;
+}
+
+div.app {
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 100px;
+}
+
+div.error {
+  margin-top: 1rem;
+  text-align: center;
+  font-size: 12px;
+  color: red;
+}
+
+div.loading {
+  margin-top: 3rem;
+  text-align: center;
+  font-size: 20px;
+  color: #ccc;
+}
+
+div.search-query {
+  text-align: center;
+}
+
+div.search-query input[type=text] {
+  border-radius: 4px 0 0 4px;
+  border-right: none;
+  width: 300px;
+}
+
+div.search-query button {
+  border-radius: 0 4px 4px 0;
+}
+
+div.search-results {
+  max-width: 450px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+div.found-item {
+  margin-top: 2rem;
+}
+
+div.found-item .title {
+  font-size: 20px;
+}
+
+div.work div.author {
+  text-align: center;
+}
+
+div.work div.description {
+  margin-top: 2rem;
+  font-size: 16px;
+}
+
+div.editions-container div.header {
+  margin-top: 2rem;
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: #aaa;
+}
+
+div.editions {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+div.editions div.edition {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+  border-bottom-style: dashed;
+  border-bottom-color: #ccc;
+}
+
+div.edition div.title {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+div.edition div.cover {
+  margin-top: 5px;
+}

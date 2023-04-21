@@ -43,3 +43,14 @@ lazy val exampleTodo = project
   .enablePlugins(ScalaJSPlugin)
   .settings(commonSettings)
   .dependsOn(scalafui)
+
+lazy val exampleMultipage = project
+  .in(file("examples/multipage"))
+  .enablePlugins(ScalaJSPlugin)
+  .settings(
+    commonSettings,
+    libraryDependencies ++= Seq(
+      "tech.sparse" %%% "trail" % "0.3.1"
+    )
+  )
+  .dependsOn(scalafui)

@@ -17,6 +17,9 @@ $ yarn -v
 Scaffold a Vite project:
 ```shell
 $ yarn create vite scalafui
+success Installed "create-vite@4.3.0" with binaries:
+      - create-vite
+      - cva
 Select a framework: › Vanilla
 Select a variant: › JavaScript
 ```

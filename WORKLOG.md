@@ -2,8 +2,6 @@
 
 ## Scala.js and Vite
 
-* [Getting Started with Scala\.js and Vite \- Scala\.js](https://www.scala-js.org/doc/tutorial/scalajs-vite.html)
-* [sjrd/scalajs\-sbt\-vite\-laminar\-chartjs\-example at scalajs\-vite\-end\-state](https://github.com/sjrd/scalajs-sbt-vite-laminar-chartjs-example/tree/scalajs-vite-end-state)
 * [Getting Started with Scala\.js and Vite \| Let´s talk about Scala 3 \- YouTube](https://www.youtube.com/watch?v=dv7fPmgFTNA)
 
 ### Generate an empty Vite project
@@ -73,3 +71,27 @@ According to the debug log output by `DEBUG="vite:sourcemap" yarn dev`, Vite doe
 vite:sourcemap   /path/to/scalafui/target/scala-2.13/scalafui-fastopt/https:/raw.githubusercontent.com/scala-js/scala-js/v1.13.1/library-aux/src/main/scala/scala/runtime/Statics.scala
 ```
 
+### Introduce vite-plugin-scalajs
+
+* [Getting Started with Scala\.js and Vite \- Scala\.js](https://www.scala-js.org/doc/tutorial/scalajs-vite.html)
+* [scala\-js/vite\-plugin\-scalajs: Vite plugin for integration of Scala\.js](https://github.com/scala-js/vite-plugin-scalajs)
+
+1. Add a dev dependency in `package.json`
+    * `"@scala-js/vite-plugin-scalajs": "^1.0.0"`
+    * `$ yarn`
+
+2. Update `vite.config.js` to:
+
+        import { defineConfig } from "vite";
+        import scalaJSPlugin from "@scala-js/vite-plugin-scalajs";
+
+        export default defineConfig({
+          plugins: [scalaJSPlugin()],
+        });
+
+3. Update `main.js` to:
+
+        import 'scalajs:main.js'
+
+4. Update `build.sbt`
+     * Delete `fastLinkOutputDir`, `fullLinkOutputDir` tasks

@@ -1,1 +1,1 @@
-import '@linkOutputDir/main.js'
+import 'scalajs:main.js'

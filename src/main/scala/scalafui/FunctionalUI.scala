@@ -37,7 +37,8 @@ object FunctionalUI {
       init: (URL) => (Model, Cmds[Msg]),
       view: (Model, Msg => Unit) => ReactElement,
       update: (Msg, Model) => (Model, Cmds[Msg]),
-      subscriptions: Model => Subs[Msg],
+      subscriptions: Model => Subs[Msg] = (model: Model) =>
+        Map.empty[String, Sub[Msg]],
       onUrlChange: Option[URL => Msg] = None
   )
 

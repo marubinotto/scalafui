@@ -344,7 +344,7 @@ object Main {
 
     FUI.Browser.runProgram(
       dom.document.getElementById("app"),
-      FUI.Program(init, view, update, (model: Model) => Map())
+      FUI.Program(init, view, update)
     )
   }
 }

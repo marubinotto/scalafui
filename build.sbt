@@ -37,3 +37,9 @@ lazy val scalafui = project
   .in(file("."))
   .enablePlugins(ScalaJSPlugin)
   .settings(commonSettings)
+
+lazy val exampleTodo = project
+  .in(file("examples/todo"))
+  .enablePlugins(ScalaJSPlugin)
+  .settings(commonSettings)
+  .dependsOn(scalafui)

@@ -12,7 +12,7 @@ import slinky.core.facade.ReactElement
 import slinky.hot
 import slinky.web.html._
 
-import scalafui.{FunctionalUI => FUI}
+import scalafui.FunctionalUI._
 
 object Main {
 
@@ -22,8 +22,7 @@ object Main {
 
   case class Model(messages: Seq[String], input: String)
 
-  def init(url: URL): (Model, FUI.Cmds[Msg]) =
-    (Model(Seq.empty, ""), Seq())
+  def init(url: URL): (Model, Cmds[Msg]) = (Model(Seq.empty, ""), Seq())
 
   //
   // UPDATE
@@ -33,7 +32,7 @@ object Main {
   case class Input(input: String) extends Msg
   case object Send extends Msg
 
-  def update(msg: Msg, model: Model): (Model, FUI.Cmds[Msg]) = {
+  def update(msg: Msg, model: Model): (Model, Cmds[Msg]) =
     msg match {
       case Input(input) =>
         (model.copy(input = input), Seq.empty)
@@ -44,21 +43,14 @@ object Main {
           Seq.empty
         )
     }
-  }
-
-  //
-  // SUBSCRIPTIONS
-  //
-
-  def subscriptions(model: Model): FUI.Subs[Msg] = Map()
 
   //
   // VIEW
   //
 
-  def view(model: Model, dispatch: Msg => Unit): ReactElement = {
-    div(className := "app")(
-      h1(className := "app-title")("Welcome to Functional UI!"),
+  def view(model: Model, dispatch: Msg => Unit): ReactElement =
+    div(
+      h1("Welcome to Functional UI!"),
       div(className := "message-input")(
         input(
           value := model.input,
@@ -67,19 +59,18 @@ object Main {
         button(onClick := ((e) => dispatch(Send)))("Send")
       ),
       div(className := "messages")(
-        model.messages.map(message => div(className := "message")(message))
+        model.messages.map(div(className := "message")(_))
       )
     )
-  }
 
   def main(args: Array[String]): Unit = {
     if (LinkingInfo.developmentMode) {
       hot.initialize()
     }
 
-    FUI.Browser.runProgram(
+    Browser.runProgram(
       dom.document.getElementById("app"),
-      FUI.Program(init, view, update, subscriptions)
+      Program(init, view, update)
     )
   }
 }

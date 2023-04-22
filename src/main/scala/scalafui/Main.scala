@@ -22,7 +22,7 @@ object Main {
 
   case class Model(messages: Seq[String], input: String)
 
-  def init(url: URL): (Model, Cmds[Msg]) = (Model(Seq.empty, ""), Seq())
+  def init(url: URL): (Model, Cmds[Msg]) = (Model(Seq.empty, ""), Seq.empty)
 
   //
   // UPDATE

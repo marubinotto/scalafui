@@ -67,6 +67,7 @@ object Main {
 }
 ```
 
+
 ## Running Examples
 
 * Requirements
@@ -118,3 +119,10 @@ $ yarn run dev
 ```console
 sbt> ~exampleMultipage/fastLinkJS
 ```
+
+
+## References
+
+* [The Elm Architecture · An Introduction to Elm](https://guide.elm-lang.org/architecture/)
+* [Functional UI \(Framework\-Free at Last\)](https://www.infoq.com/articles/functional-UI-introduction-no-framework/)
+

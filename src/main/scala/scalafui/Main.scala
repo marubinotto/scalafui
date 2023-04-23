@@ -5,8 +5,6 @@ import scala.scalajs.LinkingInfo
 import org.scalajs.dom
 import org.scalajs.dom.URL
 
-import cats.effect.IO
-
 import slinky.core._
 import slinky.core.facade.ReactElement
 import slinky.hot

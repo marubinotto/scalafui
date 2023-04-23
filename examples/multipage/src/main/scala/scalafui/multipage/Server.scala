@@ -3,8 +3,6 @@ package scalafui.multipage
 import scala.util.Success
 import scala.util.Failure
 
-import cats.effect.IO
-
 import io.circe._
 import io.circe.Decoder
 import io.circe.parser._
@@ -43,7 +41,7 @@ object Server {
   def searchWorks[Msg](
       query: String,
       createMsg: Either[Throwable, Seq[Work]] => Msg
-  ): IO[Option[Msg]] = {
+  ): Cmd[Msg] = {
     val encodedQuery = URIUtils.encodeURIComponent(query)
     Browser.ajaxGet(
       "https://openlibrary.org/search.json?q=" + encodedQuery,
@@ -55,7 +53,7 @@ object Server {
   def fetchWork[Msg](
       id: String,
       createMsg: Either[Throwable, Work] => Msg
-  ): IO[Option[Msg]] = {
+  ): Cmd[Msg] = {
     Browser.ajaxGet(
       "https://openlibrary.org/works/" + id + ".json",
       workDecoder,
@@ -90,7 +88,7 @@ object Server {
   def fetchEditions[Msg](
       workId: String,
       createMsg: Either[Throwable, Seq[Edition]] => Msg
-  ): IO[Option[Msg]] = {
+  ): Cmd[Msg] = {
     val encodedWorkId = URIUtils.encodeURIComponent(workId)
     Browser.ajaxGet(
       "https://openlibrary.org/works/" + encodedWorkId + "/editions.json",

@@ -2,8 +2,6 @@ package scalafui.multipage.page
 
 import scala.scalajs.js
 
-import cats.effect.IO
-
 import slinky.core._
 import slinky.core.facade.ReactElement
 import slinky.web.html._

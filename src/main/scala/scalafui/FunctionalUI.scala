@@ -25,7 +25,8 @@ import io.circe.parser._
 import io.circe.syntax._
 
 object FunctionalUI {
-  type Cmds[Msg] = Seq[IO[Option[Msg]]]
+  type Cmd[Msg] = IO[Option[Msg]]
+  type Cmds[Msg] = Seq[Cmd[Msg]]
 
   type Sub[Msg] = (Dispatch[Msg], OnSubscribe) => Unit
   type Subs[Msg] = Map[String, Sub[Msg]]
@@ -122,7 +123,7 @@ object FunctionalUI {
     /** Change the URL, but do not trigger a page load. This will add a new
       * entry to the browser history.
       */
-    def pushUrl[Msg](url: String): IO[Option[Msg]] =
+    def pushUrl[Msg](url: String): Cmd[Msg] =
       IO {
         dom.window.history.pushState((), "", url)
         listenersOnPushUrl.foreach(_(new URL(dom.window.location.href)))
@@ -132,7 +133,7 @@ object FunctionalUI {
     /** Change the URL, but do not trigger a page load. This will not add a new
       * entry to the browser history.
       */
-    def replaceUrl[Msg](url: String): IO[Option[Msg]] =
+    def replaceUrl[Msg](url: String): Cmd[Msg] =
       IO {
         dom.window.history.replaceState((), "", url)
         None
@@ -141,7 +142,7 @@ object FunctionalUI {
     def ajaxGetJson[Msg](
         url: String,
         createMsg: Either[Throwable, Json] => Msg
-    ): IO[Option[Msg]] =
+    ): Cmd[Msg] =
       IO.async { cb =>
         IO {
           dom.fetch(url).flatMap(_.text()).onComplete {
@@ -163,7 +164,7 @@ object FunctionalUI {
         url: String,
         decoder: Decoder[Result],
         createMsg: Either[Throwable, Result] => Msg
-    ): IO[Option[Msg]] =
+    ): Cmd[Msg] =
       IO.async { cb =>
         IO {
           implicit val resultDecoder = decoder

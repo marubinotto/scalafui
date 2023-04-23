@@ -6,7 +6,7 @@ import slinky.core._
 import slinky.core.facade.ReactElement
 import slinky.web.html._
 
-import scalafui.{FunctionalUI => FUI}
+import scalafui.FunctionalUI._
 import scalafui.multipage.Domain
 import scalafui.multipage.Server
 import scalafui.multipage.Main.Route
@@ -24,10 +24,10 @@ object Search {
       works: Seq[Domain.Work]
   )
 
-  def init(): (Model, FUI.Cmds[Msg]) =
+  def init(): (Model, Cmds[Msg]) =
     (Model("", false, None, Seq.empty), Seq.empty)
 
-  def init(query: String): (Model, FUI.Cmds[Msg]) =
+  def init(query: String): (Model, Cmds[Msg]) =
     (Model(query, false, None, Seq.empty), Seq(IO(Some(SendQuery))))
 
   //
@@ -41,7 +41,7 @@ object Search {
       extends Msg
   case class FoundItemClicked(workId: String) extends Msg
 
-  def update(msg: Msg, model: Model): (Model, FUI.Cmds[Msg]) =
+  def update(msg: Msg, model: Model): (Model, Cmds[Msg]) =
     msg match {
       case QueryInput(query) =>
         (model.copy(query = query), Seq.empty)
@@ -50,7 +50,7 @@ object Search {
         (
           model.copy(loading = true, loadingError = None),
           Seq(
-            FUI.Browser
+            Browser
               .replaceUrl(Route.searchWithQuery.url(model.query))
               .flatMap(_ =>
                 Server.searchWorks(model.query, result => SearchResult(result))
@@ -71,7 +71,7 @@ object Search {
         )
 
       case FoundItemClicked(workId) =>
-        (model, Seq(FUI.Browser.pushUrl(Route.work.url(workId))))
+        (model, Seq(Browser.pushUrl(Route.work.url(workId))))
     }
 
   //

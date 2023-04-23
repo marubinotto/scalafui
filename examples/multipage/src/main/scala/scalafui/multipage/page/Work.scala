@@ -8,7 +8,7 @@ import slinky.core._
 import slinky.core.facade.ReactElement
 import slinky.web.html._
 
-import scalafui.{FunctionalUI => FUI}
+import scalafui.FunctionalUI._
 import scalafui.multipage.Domain
 import scalafui.multipage.Server
 
@@ -28,7 +28,7 @@ object Work {
       loadingEditionsError: Option[Throwable]
   )
 
-  def init(workId: String): (Model, FUI.Cmds[Msg]) =
+  def init(workId: String): (Model, Cmds[Msg]) =
     (
       Model(workId, None, true, None, Seq.empty, true, None),
       Seq(
@@ -46,7 +46,7 @@ object Work {
   case class EditionsFetched(result: Either[Throwable, Seq[Domain.Edition]])
       extends Msg
 
-  def update(msg: Msg, model: Model): (Model, FUI.Cmds[Msg]) =
+  def update(msg: Msg, model: Model): (Model, Cmds[Msg]) =
     msg match {
       case WorkFetched(Right(work)) =>
         (model.copy(loadingWork = false, work = Some(work)), Seq.empty)

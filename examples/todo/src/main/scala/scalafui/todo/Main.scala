@@ -15,7 +15,7 @@ import slinky.core.facade.ReactElement
 import slinky.hot
 import slinky.web.html._
 
-import scalafui.{FunctionalUI => FUI}
+import scalafui.FunctionalUI._
 
 @JSImport("/index.css", JSImport.Default)
 @js.native
@@ -57,7 +57,7 @@ object Main {
       id = id
     )
 
-  def init(url: URL): (Model, FUI.Cmds[Msg]) = (emptyModel(), Seq())
+  def init(url: URL): (Model, Cmds[Msg]) = (emptyModel(), Seq())
 
   //
   // UPDATE
@@ -74,7 +74,7 @@ object Main {
   case class CheckAll(isCompleted: Boolean) extends Msg
   case class ChangeVisibility(visibility: String) extends Msg
 
-  def update(msg: Msg, model: Model): (Model, FUI.Cmds[Msg]) = {
+  def update(msg: Msg, model: Model): (Model, Cmds[Msg]) = {
     msg match {
       case Add =>
         (
@@ -342,9 +342,9 @@ object Main {
       hot.initialize()
     }
 
-    FUI.Browser.runProgram(
+    Browser.runProgram(
       dom.document.getElementById("app"),
-      FUI.Program(init, view, update)
+      Program(init, view, update)
     )
   }
 }

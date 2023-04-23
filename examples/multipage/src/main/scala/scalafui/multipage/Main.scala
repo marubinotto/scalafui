@@ -17,7 +17,7 @@ import slinky.web.html._
 
 import trail._
 
-import scalafui.{FunctionalUI => FUI}
+import scalafui.FunctionalUI._
 
 @JSImport("/index.css", JSImport.Default)
 @js.native
@@ -46,7 +46,7 @@ object Main {
   case class SearchPage(pageModel: page.Search.Model) extends Page
   case class WorkPage(pageModel: page.Work.Model) extends Page
 
-  def init(url: URL): (Model, FUI.Cmds[Msg]) =
+  def init(url: URL): (Model, Cmds[Msg]) =
     applyUrlChange(url, Model(NotFoundPage))
 
   def updatePage(page: Page, model: Model): Model =
@@ -61,7 +61,7 @@ object Main {
   case class SearchPageMsg(pageMsg: page.Search.Msg) extends Msg
   case class WorkPageMsg(pageMsg: page.Work.Msg) extends Msg
 
-  def update(msg: Msg, model: Model): (Model, FUI.Cmds[Msg]) =
+  def update(msg: Msg, model: Model): (Model, Cmds[Msg]) =
     (msg, model.currentPage) match {
       case (UrlChanged(url), _) =>
         applyUrlChange(url, model)
@@ -85,7 +85,7 @@ object Main {
       case _ => (model, Seq())
     }
 
-  def applyUrlChange(url: URL, model: Model): (Model, FUI.Cmds[Msg]) =
+  def applyUrlChange(url: URL, model: Model): (Model, Cmds[Msg]) =
     url.pathname + url.search + url.hash match {
       case Route.searchWithQuery(q) =>
         applyPageUpdate(page.Search.init(q), SearchPage, SearchPageMsg, model)
@@ -101,10 +101,10 @@ object Main {
     }
 
   def applySubUpdate[SubModel, SubMsg](
-      subUpdate: (SubModel, FUI.Cmds[SubMsg]),
+      subUpdate: (SubModel, Cmds[SubMsg]),
       applyModel: SubModel => Model,
       applyMsg: SubMsg => Msg
-  ): (Model, FUI.Cmds[Msg]) = {
+  ): (Model, Cmds[Msg]) = {
     val (subModel, subCmds) = subUpdate
     (
       applyModel(subModel),
@@ -117,22 +117,16 @@ object Main {
   }
 
   def applyPageUpdate[PageModel, PageMsg](
-      subUpdate: (PageModel, FUI.Cmds[PageMsg]),
+      subUpdate: (PageModel, Cmds[PageMsg]),
       wrapModel: PageModel => Page,
       applyMsg: PageMsg => Msg,
       model: Model
-  ): (Model, FUI.Cmds[Msg]) =
+  ): (Model, Cmds[Msg]) =
     applySubUpdate[PageModel, PageMsg](
       subUpdate,
       wrapModel(_).pipe(updatePage(_, model)),
       applyMsg
     )
-
-  //
-  // SUBSCRIPTIONS
-  //
-
-  def subscriptions(model: Model): FUI.Subs[Msg] = Map()
 
   //
   // VIEW
@@ -164,9 +158,15 @@ object Main {
       hot.initialize()
     }
 
-    FUI.Browser.runProgram(
+    Browser.runProgram(
       dom.document.getElementById("app"),
-      FUI.Program(init, view, update, subscriptions, Some(UrlChanged(_)))
+      Program(
+        init,
+        view,
+        update,
+        (model: Model) => Map.empty,
+        Some(UrlChanged(_))
+      )
     )
   }
 }

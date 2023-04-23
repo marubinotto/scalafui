@@ -13,7 +13,7 @@ import io.circe.syntax._
 import scala.scalajs.js.URIUtils
 import org.scalajs.dom.ext.Ajax
 
-import scalafui.{FunctionalUI => FUI}
+import scalafui.FunctionalUI._
 import scalafui.multipage.Domain.Work
 import scalafui.multipage.Domain.Edition
 
@@ -45,7 +45,7 @@ object Server {
       createMsg: Either[Throwable, Seq[Work]] => Msg
   ): IO[Option[Msg]] = {
     val encodedQuery = URIUtils.encodeURIComponent(query)
-    FUI.Browser.ajaxGet(
+    Browser.ajaxGet(
       "https://openlibrary.org/search.json?q=" + encodedQuery,
       worksDecoder,
       createMsg
@@ -56,7 +56,7 @@ object Server {
       id: String,
       createMsg: Either[Throwable, Work] => Msg
   ): IO[Option[Msg]] = {
-    FUI.Browser.ajaxGet(
+    Browser.ajaxGet(
       "https://openlibrary.org/works/" + id + ".json",
       workDecoder,
       createMsg
@@ -92,7 +92,7 @@ object Server {
       createMsg: Either[Throwable, Seq[Edition]] => Msg
   ): IO[Option[Msg]] = {
     val encodedWorkId = URIUtils.encodeURIComponent(workId)
-    FUI.Browser.ajaxGet(
+    Browser.ajaxGet(
       "https://openlibrary.org/works/" + encodedWorkId + "/editions.json",
       editionsDecoder,
       createMsg

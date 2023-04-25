@@ -100,10 +100,11 @@ object Main {
   // VIEW
   //
 
-  def view(model: Model, dispatch: Msg => Unit): ReactElement =
+  def view(model: Model, dispatch: Msg => Unit): ReactElement = {
+    val seconds = model.elapsedTotal.toDouble / 1000.0
     div(
       div(className := "elapsed-time")(
-        viewElapsedTime(model)
+        span(className := "seconds")(f"$seconds%1.2f")
       ),
       div(className := "buttons")(
         button(onClick := ((e) => dispatch(ToggleActivation)))(
@@ -115,10 +116,6 @@ object Main {
         button(onClick := ((e) => dispatch(Reset)))("Reset")
       )
     )
-
-  def viewElapsedTime(model: Model): ReactElement = {
-    val seconds = model.elapsedTotal.toDouble / 1000.0
-    span(className := "seconds")(f"$seconds%1.2f")
   }
 
   def main(args: Array[String]): Unit = {

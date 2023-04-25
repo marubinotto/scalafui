@@ -2,6 +2,9 @@
 
 Scalafui is an experimental implementation of the Elm Architecture in Scala.js.
 
+* [The Elm Architecture · An Introduction to Elm](https://guide.elm-lang.org/architecture/)
+* [Functional UI \(Framework\-Free at Last\)](https://www.infoq.com/articles/functional-UI-introduction-no-framework/)
+
 ## Minimal Application Code
 
 ```scala
@@ -134,10 +137,3 @@ $ yarn run dev
 ```console
 sbt> ~exampleStopwatch/fastLinkJS
 ```
-
-
-## References
-
-* [The Elm Architecture · An Introduction to Elm](https://guide.elm-lang.org/architecture/)
-* [Functional UI \(Framework\-Free at Last\)](https://www.infoq.com/articles/functional-UI-introduction-no-framework/)
-

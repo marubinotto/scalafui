@@ -120,6 +120,21 @@ $ yarn run dev
 sbt> ~exampleMultipage/fastLinkJS
 ```
 
+### Stopwatch
+
+* An example of subscription which allows us to listen to external events
+* [examples/stopwatch/src/main/scala/scalafui/stopwatch/Main.scala](examples/stopwatch/src/main/scala/scalafui/stopwatch/Main.scala)
+
+```console
+$ cd examples/stopwatch
+$ yarn
+$ yarn run dev
+```
+
+```console
+sbt> ~exampleStopwatch/fastLinkJS
+```
+
 
 ## References
 

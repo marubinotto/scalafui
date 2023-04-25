@@ -54,3 +54,9 @@ lazy val exampleMultipage = project
     )
   )
   .dependsOn(scalafui)
+
+lazy val exampleStopwatch = project
+  .in(file("examples/stopwatch"))
+  .enablePlugins(ScalaJSPlugin)
+  .settings(commonSettings)
+  .dependsOn(scalafui)

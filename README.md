@@ -53,9 +53,9 @@ object Main {
       div(className := "message-input")(
         input(
           value := model.input,
-          onInput := ((e) => dispatch(Input(e.target.value)))
+          onInput := (e => dispatch(Input(e.target.value)))
         ),
-        button(onClick := ((e) => dispatch(Send)))("Send")
+        button(onClick := (e => dispatch(Send)))("Send")
       ),
       div(className := "messages")(
         model.messages.map(div(className := "message")(_))

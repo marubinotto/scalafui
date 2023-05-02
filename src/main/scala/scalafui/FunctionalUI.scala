@@ -87,6 +87,18 @@ object FunctionalUI {
       collect(sub).toMap
     }
 
+    def timeout[Msg](duration: FiniteDuration, msg: Msg, id: String): Sub[Msg] =
+      Impl[Msg](
+        id,
+        (dispatch, onSubscribe) => {
+          val handle = js.timers.setTimeout(duration) {
+            dispatch(msg)
+          }
+          val unsubscribe = () => js.timers.clearTimeout(handle)
+          onSubscribe(Some(unsubscribe))
+        }
+      )
+
     def every(interval: FiniteDuration, id: String): Sub[Long] =
       Impl[Long](
         id,

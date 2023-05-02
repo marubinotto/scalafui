@@ -80,19 +80,11 @@ object Main {
   // SUBSCRIPTIONS
   //
 
-  def subscriptions(model: Model): Subs[Msg] = {
+  def subscriptions(model: Model): Sub[Msg] = {
     if (model.active) {
-      Map(
-        "tick" -> ((dispatch: Msg => Unit, onSubscribe: OnSubscribe) => {
-          val intervalId = js.timers.setInterval(10.millis) {
-            dispatch(Tick(System.currentTimeMillis()))
-          }
-          val unsubscribe = () => js.timers.clearInterval(intervalId)
-          onSubscribe(Some(unsubscribe))
-        })
-      )
+      Sub.every(10.millis, "tick").map(Tick(_))
     } else {
-      Map.empty
+      Sub.Empty
     }
   }
 

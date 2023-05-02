@@ -164,7 +164,7 @@ object Main {
         init,
         view,
         update,
-        (model: Model) => Map.empty,
+        (model: Model) => Sub.Empty,
         Some(UrlChanged(_))
       )
     )

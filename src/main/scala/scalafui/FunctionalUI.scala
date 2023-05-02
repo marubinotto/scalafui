@@ -3,6 +3,7 @@ package scalafui
 import scala.util.Success
 import scala.util.Failure
 import scala.collection.mutable.{Map => MutableMap}
+import scala.concurrent.duration.FiniteDuration
 
 import cats.effect.IO
 
@@ -28,20 +29,76 @@ object FunctionalUI {
   type Cmd[Msg] = IO[Option[Msg]]
   type Cmds[Msg] = Seq[Cmd[Msg]]
 
-  type Sub[Msg] = (Dispatch[Msg], OnSubscribe) => Unit
-  type Subs[Msg] = Map[String, Sub[Msg]]
   type Dispatch[Msg] = Msg => Unit
-  type OnSubscribe = Option[Unsubscribe] => Unit
-  type Unsubscribe = () => Unit
 
   case class Program[Model, Msg](
       init: (URL) => (Model, Cmds[Msg]),
       view: (Model, Msg => Unit) => ReactElement,
       update: (Msg, Model) => (Model, Cmds[Msg]),
-      subscriptions: Model => Subs[Msg] = (model: Model) =>
-        Map.empty[String, Sub[Msg]],
+      subscriptions: Model => Sub[Msg] = (model: Model) => Sub.Empty,
       onUrlChange: Option[URL => Msg] = None
   )
+
+  sealed trait Sub[+Msg] {
+    def map[OtherMsg](f: Msg => OtherMsg): Sub[OtherMsg]
+
+    final def combine[LubMsg >: Msg](other: Sub[LubMsg]): Sub[LubMsg] =
+      (this, other) match {
+        case (Sub.Empty, Sub.Empty) => Sub.Empty
+        case (Sub.Empty, s2)        => s2
+        case (s1, Sub.Empty)        => s1
+        case (s1, s2)               => Sub.Combined(s1, s2)
+      }
+  }
+
+  object Sub {
+    type Subscribe[Msg] = (Dispatch[Msg], OnSubscribe) => Unit
+    type OnSubscribe = Option[Unsubscribe] => Unit
+    type Unsubscribe = () => Unit
+
+    case object Empty extends Sub[Nothing] {
+      def map[OtherMsg](f: Nothing => OtherMsg): Sub[OtherMsg] = this
+    }
+
+    case class Combined[+Msg](sub1: Sub[Msg], sub2: Sub[Msg]) extends Sub[Msg] {
+      def map[OtherMsg](f: Msg => OtherMsg): Sub[OtherMsg] =
+        Combined(sub1.map(f), sub2.map(f))
+    }
+
+    case class Impl[Msg](
+        id: String,
+        subscribe: Subscribe[Msg]
+    ) extends Sub[Msg] {
+      def map[OtherMsg](f: Msg => OtherMsg): Sub[OtherMsg] =
+        Impl(
+          id,
+          (dispatch: Dispatch[OtherMsg], onSubscribe) =>
+            subscribe(msg => dispatch(f(msg)), onSubscribe)
+        )
+    }
+
+    final def toMap[Msg](sub: Sub[Msg]): Map[String, Subscribe[Msg]] = {
+      def collect(sub: Sub[Msg]): List[(String, Subscribe[Msg])] =
+        sub match {
+          case Sub.Empty                => Nil
+          case Sub.Combined(sub1, sub2) => collect(sub1) ++ collect(sub2)
+          case Sub.Impl(id, subscribe)  => List((id, subscribe))
+        }
+      collect(sub).toMap
+    }
+
+    def every(interval: FiniteDuration, id: String): Sub[Long] =
+      Impl[Long](
+        id,
+        (dispatch, onSubscribe) => {
+          val handle = js.timers.setInterval(interval) {
+            dispatch(System.currentTimeMillis())
+          }
+          val unsubscribe = () => js.timers.clearInterval(handle)
+          onSubscribe(Some(unsubscribe))
+        }
+      )
+  }
 
   class Runtime[Model, Msg](
       container: Element,
@@ -49,7 +106,7 @@ object FunctionalUI {
   ) {
     private val init = program.init(new URL(dom.window.location.href))
     private var state = init._1
-    private val subs: MutableMap[String, Option[Unsubscribe]] = MutableMap()
+    private val subs: MutableMap[String, Option[Sub.Unsubscribe]] = MutableMap()
 
     def dispatch(msg: Msg): Unit = {
       apply(program.update(msg, state))
@@ -74,7 +131,7 @@ object FunctionalUI {
     }
 
     def updateSubs(model: Model): Unit = {
-      val newSubs = program.subscriptions(model)
+      val newSubs = Sub.toMap(program.subscriptions(model))
       val keysToAdd = newSubs.keySet.diff(subs.keySet)
       val keysToRemove = subs.keySet.diff(newSubs.keySet)
       keysToAdd.foreach(key => {

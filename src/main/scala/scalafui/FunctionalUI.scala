@@ -153,16 +153,16 @@ object FunctionalUI {
       val (model, cmds) = change
       state = model
 
-      updateSubs(state)
-
       ReactDOM.render(program.view(model, dispatch), container)
 
+      // Run side effects
       for (cmd <- cmds) {
         cmd.unsafeRunAsync {
           case Right(optionMsg) => optionMsg.map(dispatch(_))
           case Left(e) => throw e // IO should return Right even when it fails
         }
       }
+      updateSubs(state)
     }
 
     def updateSubs(model: Model): Unit = {

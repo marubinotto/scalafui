@@ -172,8 +172,8 @@ object FunctionalUI {
       keysToAdd.foreach(key => {
         // subscribe and hold `unsubscribe` function
         nextSubs.get(key) match {
-          case Some(sub) => sub(dispatch, subs(key) = _)
-          case None      => subs(key) = None
+          case Some(subscribe) => subscribe(dispatch, subs.update(key, _))
+          case None            => subs.update(key, None)
         }
       })
       keysToRemove.foreach(key => {

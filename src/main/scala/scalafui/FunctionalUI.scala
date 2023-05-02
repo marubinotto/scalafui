@@ -166,12 +166,12 @@ object FunctionalUI {
     }
 
     def updateSubs(model: Model): Unit = {
-      val newSubs = Sub.toMap(program.subscriptions(model))
-      val keysToAdd = newSubs.keySet.diff(subs.keySet)
-      val keysToRemove = subs.keySet.diff(newSubs.keySet)
+      val nextSubs = Sub.toMap(program.subscriptions(model))
+      val keysToAdd = nextSubs.keySet.diff(subs.keySet)
+      val keysToRemove = subs.keySet.diff(nextSubs.keySet)
       keysToAdd.foreach(key => {
         // subscribe and hold `unsubscribe` function
-        newSubs.get(key) match {
+        nextSubs.get(key) match {
           case Some(sub) => sub(dispatch, subs(key) = _)
           case None      => subs(key) = None
         }

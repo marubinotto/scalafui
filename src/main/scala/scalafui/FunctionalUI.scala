@@ -5,6 +5,7 @@ import scala.util.Failure
 import scala.collection.mutable.{Map => MutableMap}
 import scala.concurrent.duration.FiniteDuration
 
+import cats.MonoidK
 import cats.effect.IO
 
 import scala.scalajs.js
@@ -50,6 +51,12 @@ object FunctionalUI {
         case (s1, Sub.Empty)        => s1
         case (s1, s2)               => Sub.Combined(s1, s2)
       }
+  }
+
+  implicit object MonoidKSub extends MonoidK[Sub] {
+    def empty[Msg]: Sub[Msg] = Sub.Empty
+    def combineK[Msg](sub1: Sub[Msg], sub2: Sub[Msg]): Sub[Msg] =
+      sub1.combine(sub2)
   }
 
   object Sub {

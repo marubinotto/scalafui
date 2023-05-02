@@ -52,8 +52,8 @@ object Search {
           Seq(
             Browser
               .replaceUrl(Route.searchWithQuery.url(model.query))
-              .flatMap(_ =>
-                Server.searchWorks(model.query, result => SearchResult(result))
+              .flatMap((_: Option[Msg]) =>
+                Server.searchWorks(model.query, SearchResult(_))
               )
           )
         )

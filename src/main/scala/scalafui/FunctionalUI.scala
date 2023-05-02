@@ -12,6 +12,7 @@ import scala.scalajs.js
 import org.scalajs.dom
 import org.scalajs.dom.Element
 import org.scalajs.dom.URL
+import org.scalajs.dom.EventTarget
 import org.scalajs.dom.raw.CustomEvent
 import org.scalajs.dom.Event
 import org.scalajs.dom.ext.Ajax
@@ -107,6 +108,21 @@ object FunctionalUI {
             dispatch(System.currentTimeMillis())
           }
           val unsubscribe = () => js.timers.clearInterval(handle)
+          onSubscribe(Some(unsubscribe))
+        }
+      )
+
+    def fromEvent[Event, Msg](name: String, target: EventTarget)(
+        toMsg: Event => Option[Msg]
+    ): Sub[Msg] =
+      Impl[Msg](
+        name + target.hashCode,
+        (dispatch, onSubscribe) => {
+          val listener: js.Function1[Event, _] =
+            (e: Event) => toMsg(e).map(dispatch(_))
+          target.addEventListener(name, listener)
+
+          val unsubscribe = () => target.removeEventListener(name, listener)
           onSubscribe(Some(unsubscribe))
         }
       )

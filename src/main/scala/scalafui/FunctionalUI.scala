@@ -28,11 +28,6 @@ import io.circe.parser._
 import io.circe.syntax._
 
 object FunctionalUI {
-  type Cmd[Msg] = IO[Option[Msg]]
-  type Cmds[Msg] = Seq[Cmd[Msg]]
-
-  type Dispatch[Msg] = Msg => Unit
-
   case class Program[Model, Msg](
       init: (URL) => (Model, Cmds[Msg]),
       view: (Model, Msg => Unit) => ReactElement,
@@ -40,6 +35,11 @@ object FunctionalUI {
       subscriptions: Model => Sub[Msg] = (model: Model) => Sub.Empty,
       onUrlChange: Option[URL => Msg] = None
   )
+
+  type Cmd[Msg] = IO[Option[Msg]]
+  type Cmds[Msg] = Seq[Cmd[Msg]]
+
+  type Dispatch[Msg] = Msg => Unit
 
   sealed trait Sub[+Msg] {
     def map[OtherMsg](f: Msg => OtherMsg): Sub[OtherMsg]

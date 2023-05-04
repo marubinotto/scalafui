@@ -26,7 +26,7 @@ object Work {
       loadingEditionsError: Option[Throwable]
   )
 
-  def init(workId: String): (Model, Cmds[Msg]) =
+  def init(workId: String): (Model, Seq[Cmd[Msg]]) =
     (
       Model(workId, None, true, None, Seq.empty, true, None),
       Seq(
@@ -44,7 +44,7 @@ object Work {
   case class EditionsFetched(result: Either[Throwable, Seq[Domain.Edition]])
       extends Msg
 
-  def update(msg: Msg, model: Model): (Model, Cmds[Msg]) =
+  def update(msg: Msg, model: Model): (Model, Seq[Cmd[Msg]]) =
     msg match {
       case WorkFetched(Right(work)) =>
         (model.copy(loadingWork = false, work = Some(work)), Seq.empty)

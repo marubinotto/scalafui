@@ -29,15 +29,14 @@ import io.circe.syntax._
 
 object FunctionalUI {
   case class Program[Model, Msg](
-      init: (URL) => (Model, Cmds[Msg]),
+      init: (URL) => (Model, Seq[Cmd[Msg]]),
       view: (Model, Msg => Unit) => ReactElement,
-      update: (Msg, Model) => (Model, Cmds[Msg]),
+      update: (Msg, Model) => (Model, Seq[Cmd[Msg]]),
       subscriptions: Model => Sub[Msg] = (model: Model) => Sub.Empty,
       onUrlChange: Option[URL => Msg] = None
   )
 
   type Cmd[Msg] = IO[Option[Msg]]
-  type Cmds[Msg] = Seq[Cmd[Msg]]
 
   sealed trait Sub[+Msg] {
     def map[OtherMsg](f: Msg => OtherMsg): Sub[OtherMsg]
@@ -145,7 +144,7 @@ object FunctionalUI {
       apply(program.update(msg, state))
     }
 
-    def apply(change: (Model, Cmds[Msg])): Unit = {
+    def apply(change: (Model, Seq[Cmd[Msg]])): Unit = {
       import cats.effect.unsafe.implicits.global
 
       val (model, cmds) = change

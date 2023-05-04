@@ -24,10 +24,10 @@ object Search {
       works: Seq[Domain.Work]
   )
 
-  def init(): (Model, Cmds[Msg]) =
+  def init(): (Model, Seq[Cmd[Msg]]) =
     (Model("", false, None, Seq.empty), Seq.empty)
 
-  def init(query: String): (Model, Cmds[Msg]) =
+  def init(query: String): (Model, Seq[Cmd[Msg]]) =
     (Model(query, false, None, Seq.empty), Seq(IO(Some(SendQuery))))
 
   //
@@ -41,7 +41,7 @@ object Search {
       extends Msg
   case class FoundItemClicked(workId: String) extends Msg
 
-  def update(msg: Msg, model: Model): (Model, Cmds[Msg]) =
+  def update(msg: Msg, model: Model): (Model, Seq[Cmd[Msg]]) =
     msg match {
       case QueryInput(query) =>
         (model.copy(query = query), Seq.empty)

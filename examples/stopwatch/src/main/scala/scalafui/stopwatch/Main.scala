@@ -31,7 +31,7 @@ object Main {
     def elapsedTotal: Long = elapsedBefore + elapsed
   }
 
-  def init(url: URL): (Model, Cmds[Msg]) = (Model(), Seq.empty)
+  def init(url: URL): (Model, Seq[Cmd[Msg]]) = (Model(), Seq.empty)
 
   //
   // UPDATE
@@ -43,7 +43,7 @@ object Main {
   case class Tick(currentTime: Long) extends Msg
   case object Reset extends Msg
 
-  def update(msg: Msg, model: Model): (Model, Cmds[Msg]) =
+  def update(msg: Msg, model: Model): (Model, Seq[Cmd[Msg]]) =
     msg match {
       case ToggleActivation =>
         (

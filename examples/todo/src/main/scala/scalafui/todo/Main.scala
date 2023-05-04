@@ -57,7 +57,7 @@ object Main {
       id = id
     )
 
-  def init(url: URL): (Model, Cmds[Msg]) = (emptyModel(), Seq())
+  def init(url: URL): (Model, Seq[Cmd[Msg]]) = (emptyModel(), Seq())
 
   //
   // UPDATE
@@ -74,7 +74,7 @@ object Main {
   case class CheckAll(isCompleted: Boolean) extends Msg
   case class ChangeVisibility(visibility: String) extends Msg
 
-  def update(msg: Msg, model: Model): (Model, Cmds[Msg]) = {
+  def update(msg: Msg, model: Model): (Model, Seq[Cmd[Msg]]) = {
     msg match {
       case Add =>
         (

@@ -46,7 +46,7 @@ object Main {
   case class SearchPage(pageModel: page.Search.Model) extends Page
   case class WorkPage(pageModel: page.Work.Model) extends Page
 
-  def init(url: URL): (Model, Cmds[Msg]) =
+  def init(url: URL): (Model, Seq[Cmd[Msg]]) =
     applyUrlChange(url, Model(NotFoundPage))
 
   def updatePage(page: Page, model: Model): Model =
@@ -61,7 +61,7 @@ object Main {
   case class SearchPageMsg(pageMsg: page.Search.Msg) extends Msg
   case class WorkPageMsg(pageMsg: page.Work.Msg) extends Msg
 
-  def update(msg: Msg, model: Model): (Model, Cmds[Msg]) =
+  def update(msg: Msg, model: Model): (Model, Seq[Cmd[Msg]]) =
     (msg, model.currentPage) match {
       case (UrlChanged(url), _) =>
         applyUrlChange(url, model)
@@ -85,7 +85,7 @@ object Main {
       case _ => (model, Seq())
     }
 
-  def applyUrlChange(url: URL, model: Model): (Model, Cmds[Msg]) =
+  def applyUrlChange(url: URL, model: Model): (Model, Seq[Cmd[Msg]]) =
     url.pathname + url.search + url.hash match {
       case Route.searchWithQuery(q) =>
         applyPageUpdate(page.Search.init(q), SearchPage, SearchPageMsg, model)
@@ -101,10 +101,10 @@ object Main {
     }
 
   def applySubUpdate[SubModel, SubMsg](
-      subUpdate: (SubModel, Cmds[SubMsg]),
+      subUpdate: (SubModel, Seq[Cmd[SubMsg]]),
       applyModel: SubModel => Model,
       applyMsg: SubMsg => Msg
-  ): (Model, Cmds[Msg]) = {
+  ): (Model, Seq[Cmd[Msg]]) = {
     val (subModel, subCmds) = subUpdate
     (
       applyModel(subModel),
@@ -117,11 +117,11 @@ object Main {
   }
 
   def applyPageUpdate[PageModel, PageMsg](
-      subUpdate: (PageModel, Cmds[PageMsg]),
+      subUpdate: (PageModel, Seq[Cmd[PageMsg]]),
       wrapModel: PageModel => Page,
       applyMsg: PageMsg => Msg,
       model: Model
-  ): (Model, Cmds[Msg]) =
+  ): (Model, Seq[Cmd[Msg]]) =
     applySubUpdate[PageModel, PageMsg](
       subUpdate,
       wrapModel(_).pipe(updatePage(_, model)),

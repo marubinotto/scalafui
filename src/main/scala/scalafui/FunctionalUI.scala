@@ -39,8 +39,6 @@ object FunctionalUI {
   type Cmd[Msg] = IO[Option[Msg]]
   type Cmds[Msg] = Seq[Cmd[Msg]]
 
-  type Dispatch[Msg] = Msg => Unit
-
   sealed trait Sub[+Msg] {
     def map[OtherMsg](f: Msg => OtherMsg): Sub[OtherMsg]
 
@@ -60,7 +58,7 @@ object FunctionalUI {
   }
 
   object Sub {
-    type Subscribe[Msg] = (Dispatch[Msg], OnSubscribe) => Unit
+    type Subscribe[Msg] = (Msg => Unit, OnSubscribe) => Unit
     type OnSubscribe = Option[Unsubscribe] => Unit
     type Unsubscribe = () => Unit
 
@@ -80,7 +78,7 @@ object FunctionalUI {
       def map[OtherMsg](f: Msg => OtherMsg): Sub[OtherMsg] =
         Impl(
           id,
-          (dispatch: Dispatch[OtherMsg], onSubscribe) =>
+          (dispatch: OtherMsg => Unit, onSubscribe) =>
             subscribe(msg => dispatch(f(msg)), onSubscribe)
         )
     }

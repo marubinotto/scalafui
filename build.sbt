@@ -1,12 +1,19 @@
 import org.scalajs.linker.interface.ModuleSplitStyle
 
-ThisBuild / scalaVersion := "2.13.10"
+ThisBuild / scalaVersion := "2.13.16"
 
-val circeVersion = "0.14.5"
-val slinkyVersion = "0.7.3"
+val circeVersion = "0.14.7"
+val slinkyVersion = "0.7.4"
 
 lazy val commonSettings = Seq(
-  scalacOptions ++= Seq("-encoding", "utf-8", "-deprecation", "-feature"),
+  scalacOptions ++= Seq(
+    "-encoding",
+    "utf-8",
+    "-deprecation",
+    "-feature",
+    "-Ymacro-annotations",
+    "-Xlint:unused"
+  ),
 
   // We have a `main` method
   scalaJSUseMainModuleInitializer := true,
@@ -21,14 +28,14 @@ lazy val commonSettings = Seq(
       )
   },
   libraryDependencies ++= Seq(
-    "org.scala-js" %%% "scalajs-dom" % "2.4.0",
-    "org.scala-js" %%% "scala-js-macrotask-executor" % "1.0.0",
+    "org.scala-js" %%% "scalajs-dom" % "2.8.0",
+    "org.scala-js" %%% "scala-js-macrotask-executor" % "1.1.1",
     "me.shadaj" %%% "slinky-web" % slinkyVersion,
     "me.shadaj" %%% "slinky-hot" % slinkyVersion,
     "io.circe" %%% "circe-core" % circeVersion,
     "io.circe" %%% "circe-generic" % circeVersion,
     "io.circe" %%% "circe-parser" % circeVersion,
-    "org.typelevel" %%% "cats-effect" % "3.4.5",
+    "org.typelevel" %%% "cats-effect" % "3.5.4",
     "org.scalatest" %%% "scalatest" % "3.2.9" % Test
   )
 )

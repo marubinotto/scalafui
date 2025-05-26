@@ -7,7 +7,7 @@ Scalafui is an experimental implementation of the Elm Architecture in Scala.js.
 
 ## Minimal Application Code
 
-The following code is an example of a minimal application implementation using Scalafui. The framework is a single Scala file ([FunctionalUI.scala](src/main/scala/scalafui/FunctionalUI.scala)) that contains the necessary constructs to implement web frontend applications following the Elm Architecture.
+The following code is an example of a minimal application implementation using Scalafui.
 
 ```scala
 import scala.scalajs.LinkingInfo

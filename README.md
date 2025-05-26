@@ -121,7 +121,7 @@ sbt> ~fastLinkJS
 ### ToDo
 
 * Scalafui's version of [TodoMVC](https://todomvc.com/)
-* [examples/todo/src/main/scala/scalafui/todo/Main.scala](examples/todo/src/main/scala/scalafui/todo/Main.scala)
+* [examples/todo/src/main/scala/todo/Main.scala](examples/todo/src/main/scala/todo/Main.scala)
 
 ```console
 $ cd examples/todo
@@ -135,8 +135,8 @@ sbt> ~exampleTodo/fastLinkJS
 
 ### Multipage
 
-* Multi-page application with [Ajax calls](examples/multipage/src/main/scala/scalafui/multipage/Server.scala)
-* [examples/multipage/src/main/scala/scalafui/multipage/Main.scala](examples/multipage/src/main/scala/scalafui/multipage/Main.scala)
+* Multi-page application with [Ajax calls](examples/multipage/src/main/scala/multipage/Server.scala)
+* [examples/multipage/src/main/scala/multipage/Main.scala](examples/multipage/src/main/scala/multipage/Main.scala)
 
 ```console
 $ cd examples/multipage

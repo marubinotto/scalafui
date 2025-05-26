@@ -1,20 +1,19 @@
-package scalafui.stopwatch
+package stopwatch
 
-import scala.scalajs.js
+import scala.util.chaining._
 import scala.scalajs.LinkingInfo
 import org.scalajs.dom
 import org.scalajs.dom.URL
 
 import scala.concurrent.duration.DurationInt
 
-import slinky.core._
 import slinky.core.facade.ReactElement
 import slinky.hot
 import slinky.web.html._
 
 import cats.effect.IO
 
-import scalafui.FunctionalUI._
+import fui._
 
 object Main {
 
@@ -29,9 +28,11 @@ object Main {
       active: Boolean = false
   ) {
     def elapsedTotal: Long = elapsedBefore + elapsed
+
+    def toggle: Model = copy(active = !active)
   }
 
-  def init(url: URL): (Model, Seq[Cmd[Msg]]) = (Model(), Seq.empty)
+  def init(url: URL): (Model, Cmd[Msg]) = (Model(), Cmd.none)
 
   //
   // UPDATE
@@ -43,16 +44,18 @@ object Main {
   case class Tick(currentTime: Long) extends Msg
   case object Reset extends Msg
 
-  def update(msg: Msg, model: Model): (Model, Seq[Cmd[Msg]]) =
+  def update(msg: Msg, model: Model): (Model, Cmd[Msg]) =
     msg match {
       case ToggleActivation =>
-        (
-          model.copy(active = !model.active),
-          if (!model.active)
-            Seq(IO { Some(StartTime(System.currentTimeMillis())) })
-          else
-            Seq.empty
-        )
+        model.toggle.pipe { model =>
+          (
+            model,
+            if (model.active)
+              Cmd.One(IO { Some(StartTime(System.currentTimeMillis())) })
+            else
+              Cmd.none
+          )
+        }
 
       case StartTime(time) =>
         (
@@ -61,7 +64,7 @@ object Main {
             elapsedBefore = model.elapsedTotal,
             elapsed = 0
           ),
-          Seq.empty
+          Cmd.none
         )
 
       case Tick(currentTime) =>
@@ -69,24 +72,22 @@ object Main {
           model.copy(elapsed =
             model.startTime.map(currentTime - _).getOrElse(0)
           ),
-          Seq.empty
+          Cmd.none
         )
 
-      case Reset =>
-        (Model(), Seq.empty)
+      case Reset => (Model(), Cmd.none)
     }
 
   //
   // SUBSCRIPTIONS
   //
 
-  def subscriptions(model: Model): Sub[Msg] = {
+  def subscriptions(model: Model): Sub[Msg] =
     if (model.active) {
       Sub.every(10.millis, "tick").map(Tick(_))
     } else {
       Sub.Empty
     }
-  }
 
   //
   // VIEW

@@ -36,6 +36,7 @@ lazy val commonSettings = Seq(
     "io.circe" %%% "circe-generic" % circeVersion,
     "io.circe" %%% "circe-parser" % circeVersion,
     "org.typelevel" %%% "cats-effect" % "3.5.4",
+    "com.softwaremill.quicklens" %%% "quicklens" % "1.9.7",
     "org.scalatest" %%% "scalatest" % "3.2.9" % Test
   )
 )

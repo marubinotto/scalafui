@@ -2,6 +2,8 @@ import scala.scalajs.LinkingInfo
 import org.scalajs.dom
 import org.scalajs.dom.URL
 
+import com.softwaremill.quicklens._
+
 import slinky.core.facade.ReactElement
 import slinky.hot
 import slinky.web.html._
@@ -29,11 +31,16 @@ object Main {
   def update(msg: Msg, model: Model): (Model, Cmd[Msg]) =
     msg match {
       case Input(input) =>
-        (model.copy(input = input), Cmd.none)
+        (
+          model.modify(_.input).setTo(input),
+          Cmd.none
+        )
 
       case Send =>
         (
-          model.copy(messages = model.messages :+ model.input, input = ""),
+          model
+            .modify(_.messages).using(_ :+ model.input)
+            .modify(_.input).setTo(""),
           Cmd.none
         )
     }

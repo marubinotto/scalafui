@@ -25,7 +25,10 @@ object Search {
   def init(): (Model, Cmd[Msg]) = (Model(), Cmd.none)
 
   def init(query: String): (Model, Cmd[Msg]) =
-    (Model().copy(query = query), Browser.send(SendQuery))
+    (
+      Model().copy(query = query, loading = true),
+      Server.searchWorks(query).map(SearchResult(query, _))
+    )
 
   //
   // UPDATE
@@ -33,33 +36,48 @@ object Search {
 
   sealed trait Msg
   case class QueryInput(query: String) extends Msg
-  case object SendQuery extends Msg
-  case class SearchResult(result: Either[Throwable, Seq[domain.Work]])
-      extends Msg
+  case class SearchResult(
+      query: String,
+      result: Either[Throwable, Seq[domain.Work]]
+  ) extends Msg
   case class FoundItemClicked(workId: String) extends Msg
+
+  val DebounceKey = "search"
 
   def update(msg: Msg, model: Model): (Model, Cmd[Msg]) =
     msg match {
       case QueryInput(query) =>
-        (model.copy(query = query), Cmd.none)
-
-      case SendQuery => {
-        (
-          model.copy(loading = true, loadingError = None),
-          Cmd.Batch(
-            Browser.replaceUrl(Route.searchWithQuery.url(model.query)),
-            Server.searchWorks(model.query).map(SearchResult(_))
+        if (query.isBlank())
+          (
+            model.copy(
+              query = query,
+              loading = false,
+              loadingError = None,
+              works = Seq.empty
+            ),
+            Browser.replaceUrl(Route.search.url(()))
+              .debounce(DebounceKey, 1) // Cancel previous search
           )
-        )
-      }
+        else
+          (
+            model.copy(query = query, loading = true, loadingError = None),
+            Cmd.Batch(
+              Browser.replaceUrl(Route.searchWithQuery.url(query)),
+              Server.searchWorks(query)
+                .map(SearchResult(query, _))
+                .debounce(DebounceKey, 500)
+            )
+          )
 
-      case SearchResult(Right(works)) =>
+      case SearchResult(query, Right(works)) => {
+        println(s"Search results for '$query': ${works.size} works found")
         (
           model.copy(loading = false, loadingError = None, works = works),
           Cmd.none
         )
+      }
 
-      case SearchResult(Left(error)) =>
+      case SearchResult(query, Left(error)) =>
         (
           model.copy(loading = false, loadingError = Some(error)),
           Cmd.none
@@ -81,12 +99,8 @@ object Search {
           `type` := "text",
           placeholder := "Title or Author Name (e.g. Haruki)",
           value := model.query,
-          onInput := ((e) => dispatch(QueryInput(e.target.value)))
-        ),
-        button(
-          disabled := model.query.trim().isEmpty() || model.loading,
-          onClick := ((e) => dispatch(SendQuery))
-        )("Search")
+          onChange := ((e) => dispatch(QueryInput(e.target.value)))
+        )
       ),
       model.loadingError.map(error =>
         div(className := "error")(error.toString())

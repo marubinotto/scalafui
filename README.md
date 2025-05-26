@@ -136,6 +136,7 @@ sbt> ~exampleTodo/fastLinkJS
 ### Multipage
 
 * Multi-page application with [Ajax calls](examples/multipage/src/main/scala/multipage/Server.scala)
+* Debounce Search Cmd 
 * [examples/multipage/src/main/scala/multipage/Main.scala](examples/multipage/src/main/scala/multipage/Main.scala)
 
 ```console

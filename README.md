@@ -105,7 +105,7 @@ object Main {
 
 ### Hello World
 
-* [src/main/scala/scalafui/Main.scala](src/main/scala/scalafui/Main.scala)
+* [src/main/scala/Main.scala](src/main/scala/Main.scala)
 
 In development mode, use two terminals in parallel:
 

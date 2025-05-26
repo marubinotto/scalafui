@@ -43,13 +43,15 @@ object Search {
       case QueryInput(query) =>
         (model.copy(query = query), Cmd.none)
 
-      case SendQuery =>
+      case SendQuery => {
         (
           model.copy(loading = true, loadingError = None),
-          Browser
-            .replaceUrl(Route.searchWithQuery.url(model.query))
-            .flatMap(_ => Server.searchWorks(model.query).map(SearchResult(_)))
+          Cmd.Batch(
+            Browser.replaceUrl(Route.searchWithQuery.url(model.query)),
+            Server.searchWorks(model.query).map(SearchResult(_))
+          )
         )
+      }
 
       case SearchResult(Right(works)) =>
         (

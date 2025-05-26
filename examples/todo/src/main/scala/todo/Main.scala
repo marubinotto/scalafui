@@ -9,6 +9,7 @@ import org.scalajs.dom.HTMLElement
 import org.scalajs.dom.URL
 
 import cats.effect.IO
+import com.softwaremill.quicklens._
 
 import slinky.core.facade.ReactElement
 import slinky.hot
@@ -31,7 +32,40 @@ object Main {
       taskInput: String = "",
       uid: Int = 0,
       visibility: String = "All"
-  )
+  ) {
+    def add(description: String): Model =
+      this.copy(
+        uid = uid + 1,
+        taskInput = "",
+        entries =
+          if (description.trim().isEmpty())
+            entries
+          else
+            entries :+ Entry(description, uid)
+      )
+
+    def setEditing(id: Int, isEditing: Boolean): Model =
+      this.modify(_.entries.eachWhere(_.id == id).editing)
+        .setTo(isEditing)
+
+    def update(id: Int, description: String): Model =
+      this.modify(_.entries.eachWhere(_.id == id).description)
+        .setTo(description)
+
+    def check(id: Int, isCompleted: Boolean): Model =
+      this.modify(_.entries.eachWhere(_.id == id).completed)
+        .setTo(isCompleted)
+
+    def checkAll(isCompleted: Boolean): Model =
+      this.modify(_.entries)
+        .using(_.map(_.copy(completed = isCompleted)))
+
+    def delete(id: Int): Model =
+      this.modify(_.entries).using(_.filterNot(_.id == id))
+
+    def deleteCompleted: Model =
+      this.modify(_.entries).using(_.filterNot(_.completed))
+  }
 
   case class Entry(
       description: String,
@@ -40,13 +74,15 @@ object Main {
       id: Int
   )
 
-  def newEntry(description: String, id: Int): Entry =
-    Entry(
-      description = description,
-      completed = false,
-      editing = false,
-      id = id
-    )
+  object Entry {
+    def apply(description: String, id: Int): Entry =
+      Entry(
+        description = description,
+        completed = false,
+        editing = false,
+        id = id
+      )
+  }
 
   def init(url: URL): (Model, Cmd[Msg]) = (Model(), Cmd.none)
 
@@ -67,29 +103,13 @@ object Main {
 
   def update(msg: Msg, model: Model): (Model, Cmd[Msg]) = {
     msg match {
-      case Add =>
-        (
-          model.copy(
-            uid = model.uid + 1,
-            taskInput = "",
-            entries =
-              if (model.taskInput.trim().isEmpty())
-                model.entries
-              else
-                model.entries :+ newEntry(model.taskInput, model.uid)
-          ),
-          Cmd.none
-        )
+      case Add => (model.add(model.taskInput), Cmd.none)
 
       case UpdateInput(input) => (model.copy(taskInput = input), Cmd.none)
 
       case EditingEntry(id, isEditing) =>
         (
-          model.copy(entries =
-            model.entries.map(e =>
-              if (e.id == id) e.copy(editing = isEditing) else e
-            )
-          ),
+          model.setEditing(id, isEditing),
           Cmd(IO.async { cb =>
             IO {
               dom.document.getElementById("todo-" + id) match {
@@ -106,44 +126,15 @@ object Main {
         )
 
       case UpdateEntry(id, description) =>
-        (
-          model.copy(entries =
-            model.entries.map(e =>
-              if (e.id == id) e.copy(description = description) else e
-            )
-          ),
-          Cmd.none
-        )
+        (model.update(id, description), Cmd.none)
 
-      case Delete(id) =>
-        (
-          model.copy(entries = model.entries.filterNot(_.id == id)),
-          Cmd.none
-        )
+      case Delete(id) => (model.delete(id), Cmd.none)
 
-      case DeleteComplete =>
-        (
-          model.copy(entries = model.entries.filterNot(_.completed)),
-          Cmd.none
-        )
+      case DeleteComplete => (model.deleteCompleted, Cmd.none)
 
-      case Check(id, isCompleted) =>
-        (
-          model.copy(entries =
-            model.entries.map(e =>
-              if (e.id == id) e.copy(completed = isCompleted) else e
-            )
-          ),
-          Cmd.none
-        )
+      case Check(id, isCompleted) => (model.check(id, isCompleted), Cmd.none)
 
-      case CheckAll(isCompleted) =>
-        (
-          model.copy(entries =
-            model.entries.map(_.copy(completed = isCompleted))
-          ),
-          Cmd.none
-        )
+      case CheckAll(isCompleted) => (model.checkAll(isCompleted), Cmd.none)
 
       case ChangeVisibility(visibility) =>
         (model.copy(visibility = visibility), Cmd.none)

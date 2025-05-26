@@ -152,7 +152,7 @@ sbt> ~exampleMultipage/fastLinkJS
 ### Stopwatch
 
 * An example of subscription which allows us to listen to external events
-* [examples/stopwatch/src/main/scala/scalafui/stopwatch/Main.scala](examples/stopwatch/src/main/scala/scalafui/stopwatch/Main.scala)
+* [examples/stopwatch/src/main/scala/stopwatch/Main.scala](examples/stopwatch/src/main/scala/stopwatch/Main.scala)
 
 ```console
 $ cd examples/stopwatch

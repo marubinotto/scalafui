@@ -10,8 +10,17 @@ Scalafui is an experimental implementation of the Elm Architecture in Scala.js.
 The following code is an example of a minimal application implementation using Scalafui. The framework is a single Scala file ([FunctionalUI.scala](src/main/scala/scalafui/FunctionalUI.scala)) that contains the necessary constructs to implement web frontend applications following the Elm Architecture.
 
 ```scala
-...
-import scalafui.FunctionalUI._
+import scala.scalajs.LinkingInfo
+import org.scalajs.dom
+import org.scalajs.dom.URL
+
+import com.softwaremill.quicklens._
+
+import slinky.core.facade.ReactElement
+import slinky.hot
+import slinky.web.html._
+
+import fui._
 
 object Main {
 
@@ -21,7 +30,7 @@ object Main {
 
   case class Model(messages: Seq[String] = Seq.empty, input: String = "")
 
-  def init(url: URL): (Model, Seq[Cmd[Msg]]) = (Model(), Seq.empty)
+  def init(url: URL): (Model, Cmd[Msg]) = (Model(), Cmd.none)
 
   //
   // UPDATE
@@ -31,15 +40,20 @@ object Main {
   case class Input(input: String) extends Msg
   case object Send extends Msg
 
-  def update(msg: Msg, model: Model): (Model, Seq[Cmd[Msg]]) =
+  def update(msg: Msg, model: Model): (Model, Cmd[Msg]) =
     msg match {
       case Input(input) =>
-        (model.copy(input = input), Seq.empty)
+        (
+          model.modify(_.input).setTo(input),
+          Cmd.none
+        )
 
       case Send =>
         (
-          model.copy(messages = model.messages :+ model.input, input = ""),
-          Seq.empty
+          model
+            .modify(_.messages).using(_ :+ model.input)
+            .modify(_.input).setTo(""),
+          Cmd.none
         )
     }
 
@@ -49,13 +63,19 @@ object Main {
 
   def view(model: Model, dispatch: Msg => Unit): ReactElement =
     div(
-      h1("Welcome to Functional UI!"),
-      div(className := "message-input")(
+      h1("Welcome to Scalafui!"),
+      form(className := "message-input")(
         input(
           value := model.input,
           onInput := (e => dispatch(Input(e.target.value)))
         ),
-        button(onClick := (e => dispatch(Send)))("Send")
+        button(
+          `type` := "submit",
+          onClick := (e => {
+            e.preventDefault()
+            dispatch(Send)
+          })
+        )("Send")
       ),
       div(className := "messages")(
         model.messages.map(div(className := "message")(_))

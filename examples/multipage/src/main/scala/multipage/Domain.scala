@@ -1,6 +1,6 @@
-package scalafui.multipage
+package multipage
 
-object Domain {
+object domain {
 
   case class Work(
       id: String,

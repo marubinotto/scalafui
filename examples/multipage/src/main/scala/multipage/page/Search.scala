@@ -1,15 +1,13 @@
-package scalafui.multipage.page
+package multipage.page
 
-import cats.effect.IO
-
-import slinky.core._
 import slinky.core.facade.ReactElement
 import slinky.web.html._
 
-import scalafui.FunctionalUI._
-import scalafui.multipage.Domain
-import scalafui.multipage.Server
-import scalafui.multipage.Main.Route
+import fui._
+
+import multipage.domain
+import multipage.Server
+import multipage.Main.Route
 
 object Search {
 
@@ -18,17 +16,16 @@ object Search {
   //
 
   case class Model(
-      query: String,
-      loading: Boolean,
-      loadingError: Option[Throwable],
-      works: Seq[Domain.Work]
+      query: String = "",
+      loading: Boolean = false,
+      loadingError: Option[Throwable] = None,
+      works: Seq[domain.Work] = Seq.empty
   )
 
-  def init(): (Model, Seq[Cmd[Msg]]) =
-    (Model("", false, None, Seq.empty), Seq.empty)
+  def init(): (Model, Cmd[Msg]) = (Model(), Cmd.none)
 
-  def init(query: String): (Model, Seq[Cmd[Msg]]) =
-    (Model(query, false, None, Seq.empty), Seq(IO(Some(SendQuery))))
+  def init(query: String): (Model, Cmd[Msg]) =
+    (Model().copy(query = query), Browser.send(SendQuery))
 
   //
   // UPDATE
@@ -37,41 +34,37 @@ object Search {
   sealed trait Msg
   case class QueryInput(query: String) extends Msg
   case object SendQuery extends Msg
-  case class SearchResult(result: Either[Throwable, Seq[Domain.Work]])
+  case class SearchResult(result: Either[Throwable, Seq[domain.Work]])
       extends Msg
   case class FoundItemClicked(workId: String) extends Msg
 
-  def update(msg: Msg, model: Model): (Model, Seq[Cmd[Msg]]) =
+  def update(msg: Msg, model: Model): (Model, Cmd[Msg]) =
     msg match {
       case QueryInput(query) =>
-        (model.copy(query = query), Seq.empty)
+        (model.copy(query = query), Cmd.none)
 
       case SendQuery =>
         (
           model.copy(loading = true, loadingError = None),
-          Seq(
-            Browser
-              .replaceUrl(Route.searchWithQuery.url(model.query))
-              .flatMap((_: Option[Msg]) =>
-                Server.searchWorks(model.query, SearchResult(_))
-              )
-          )
+          Browser
+            .replaceUrl(Route.searchWithQuery.url(model.query))
+            .flatMap(_ => Server.searchWorks(model.query).map(SearchResult(_)))
         )
 
       case SearchResult(Right(works)) =>
         (
           model.copy(loading = false, loadingError = None, works = works),
-          Seq.empty
+          Cmd.none
         )
 
       case SearchResult(Left(error)) =>
         (
           model.copy(loading = false, loadingError = Some(error)),
-          Seq.empty
+          Cmd.none
         )
 
       case FoundItemClicked(workId) =>
-        (model, Seq(Browser.pushUrl(Route.work.url(workId))))
+        (model, Browser.pushUrl(Route.work.url(workId)))
     }
 
   //

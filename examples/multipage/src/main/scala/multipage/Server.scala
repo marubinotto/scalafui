@@ -1,19 +1,14 @@
-package scalafui.multipage
-
-import scala.util.Success
-import scala.util.Failure
+package multipage
 
 import io.circe._
 import io.circe.Decoder
-import io.circe.parser._
-import io.circe.syntax._
 
 import scala.scalajs.js.URIUtils
-import org.scalajs.dom.ext.Ajax
 
-import scalafui.FunctionalUI._
-import scalafui.multipage.Domain.Work
-import scalafui.multipage.Domain.Edition
+import fui._
+
+import multipage.domain.Work
+import multipage.domain.Edition
 
 //
 // Open Library API - https://openlibrary.org/developers/api
@@ -31,33 +26,26 @@ object Server {
     )
 
   val worksDecoder = new Decoder[Seq[Work]] {
-    implicit val workSeqDecoder = Decoder.decodeSeq(workDecoder)
+    implicit val workSeqDecoder: Decoder[Seq[Work]] =
+      Decoder.decodeSeq(workDecoder)
     final def apply(c: HCursor): Decoder.Result[Seq[Work]] =
       for {
         works <- c.downField("docs").as[Seq[Work]]
       } yield works
   }
 
-  def searchWorks[Msg](
-      query: String,
-      createMsg: Either[Throwable, Seq[Work]] => Msg
-  ): Cmd[Msg] = {
+  def searchWorks(query: String): Cmd.One[Either[Throwable, Seq[Work]]] = {
     val encodedQuery = URIUtils.encodeURIComponent(query)
     Browser.ajaxGet(
       "https://openlibrary.org/search.json?q=" + encodedQuery,
-      worksDecoder,
-      createMsg
+      worksDecoder
     )
   }
 
-  def fetchWork[Msg](
-      id: String,
-      createMsg: Either[Throwable, Work] => Msg
-  ): Cmd[Msg] = {
+  def fetchWork(id: String): Cmd.One[Either[Throwable, Work]] = {
     Browser.ajaxGet(
       "https://openlibrary.org/works/" + id + ".json",
-      workDecoder,
-      createMsg
+      workDecoder
     )
   }
 
@@ -78,22 +66,21 @@ object Server {
     )
 
   val editionsDecoder = new Decoder[Seq[Edition]] {
-    implicit val editionSeqDecoder = Decoder.decodeSeq(editionDecoder)
+    implicit val editionSeqDecoder: Decoder[Seq[Edition]] =
+      Decoder.decodeSeq(editionDecoder)
     final def apply(c: HCursor): Decoder.Result[Seq[Edition]] =
       for {
         editions <- c.downField("entries").as[Seq[Edition]]
       } yield editions
   }
 
-  def fetchEditions[Msg](
-      workId: String,
-      createMsg: Either[Throwable, Seq[Edition]] => Msg
-  ): Cmd[Msg] = {
+  def fetchEditions(
+      workId: String
+  ): Cmd.One[Either[Throwable, Seq[Edition]]] = {
     val encodedWorkId = URIUtils.encodeURIComponent(workId)
     Browser.ajaxGet(
       "https://openlibrary.org/works/" + encodedWorkId + "/editions.json",
-      editionsDecoder,
-      createMsg
+      editionsDecoder
     )
   }
 }

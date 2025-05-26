@@ -1,14 +1,14 @@
-package scalafui.multipage.page
+package multipage.page
 
 import scala.scalajs.js
 
-import slinky.core._
 import slinky.core.facade.ReactElement
 import slinky.web.html._
 
-import scalafui.FunctionalUI._
-import scalafui.multipage.Domain
-import scalafui.multipage.Server
+import fui._
+
+import multipage.domain
+import multipage.Server
 
 object Work {
 
@@ -18,20 +18,20 @@ object Work {
 
   case class Model(
       workId: String,
-      work: Option[Domain.Work],
-      loadingWork: Boolean,
-      loadingWorkError: Option[Throwable],
-      editions: Seq[Domain.Edition],
-      loadingEditions: Boolean,
-      loadingEditionsError: Option[Throwable]
+      work: Option[domain.Work] = None,
+      loadingWork: Boolean = true,
+      loadingWorkError: Option[Throwable] = None,
+      editions: Seq[domain.Edition] = Seq.empty,
+      loadingEditions: Boolean = true,
+      loadingEditionsError: Option[Throwable] = None
   )
 
-  def init(workId: String): (Model, Seq[Cmd[Msg]]) =
+  def init(workId: String): (Model, Cmd[Msg]) =
     (
-      Model(workId, None, true, None, Seq.empty, true, None),
-      Seq(
-        Server.fetchWork(workId, result => WorkFetched(result)),
-        Server.fetchEditions(workId, result => EditionsFetched(result))
+      Model(workId),
+      Cmd.Batch(
+        Server.fetchWork(workId).map(WorkFetched(_)),
+        Server.fetchEditions(workId).map(EditionsFetched(_))
       )
     )
 
@@ -40,23 +40,23 @@ object Work {
   //
 
   sealed trait Msg
-  case class WorkFetched(result: Either[Throwable, Domain.Work]) extends Msg
-  case class EditionsFetched(result: Either[Throwable, Seq[Domain.Edition]])
+  case class WorkFetched(result: Either[Throwable, domain.Work]) extends Msg
+  case class EditionsFetched(result: Either[Throwable, Seq[domain.Edition]])
       extends Msg
 
-  def update(msg: Msg, model: Model): (Model, Seq[Cmd[Msg]]) =
+  def update(msg: Msg, model: Model): (Model, Cmd[Msg]) =
     msg match {
       case WorkFetched(Right(work)) =>
-        (model.copy(loadingWork = false, work = Some(work)), Seq.empty)
+        (model.copy(loadingWork = false, work = Some(work)), Cmd.none)
 
       case WorkFetched(Left(error)) =>
         (
           model.copy(loadingWork = false, loadingWorkError = Some(error)),
-          Seq.empty
+          Cmd.none
         )
 
       case EditionsFetched(Right(editions)) =>
-        (model.copy(loadingEditions = false, editions = editions), Seq.empty)
+        (model.copy(loadingEditions = false, editions = editions), Cmd.none)
 
       case EditionsFetched(Left(error)) =>
         (
@@ -64,7 +64,7 @@ object Work {
             loadingEditions = false,
             loadingEditionsError = Some(error)
           ),
-          Seq.empty
+          Cmd.none
         )
     }
 
@@ -96,7 +96,7 @@ object Work {
       )
     )
 
-  def viewWork(work: Domain.Work): ReactElement =
+  def viewWork(work: domain.Work): ReactElement =
     div(className := "work")(
       h1(className := "title")(work.title),
       div(className := "author")(work.authors.map(_.mkString(", "))),
@@ -108,7 +108,7 @@ object Work {
       )
     )
 
-  def viewEdition(edition: Domain.Edition): ReactElement =
+  def viewEdition(edition: domain.Edition): ReactElement =
     div(className := "edition")(
       div(className := "title")(edition.title),
       div(className := "covers")(

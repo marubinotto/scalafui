@@ -1,4 +1,4 @@
-package scalafui.multipage
+package multipage
 
 import scala.util.chaining._
 
@@ -8,16 +8,13 @@ import scala.scalajs.js.annotation.JSImport
 import org.scalajs.dom
 import org.scalajs.dom.URL
 
-import cats.effect.IO
-
-import slinky.core._
 import slinky.core.facade.ReactElement
 import slinky.hot
 import slinky.web.html._
 
 import trail._
 
-import scalafui.FunctionalUI._
+import fui._
 
 @JSImport("/index.css", JSImport.Default)
 @js.native
@@ -39,18 +36,18 @@ object Main {
   // MODEL
   //
 
-  case class Model(currentPage: Page)
+  case class Model(currentPage: Page) {
+    def setPage(page: Page): Model =
+      this.copy(currentPage = page)
+  }
 
   sealed trait Page
   case object NotFoundPage extends Page
   case class SearchPage(pageModel: page.Search.Model) extends Page
   case class WorkPage(pageModel: page.Work.Model) extends Page
 
-  def init(url: URL): (Model, Seq[Cmd[Msg]]) =
+  def init(url: URL): (Model, Cmd[Msg]) =
     applyUrlChange(url, Model(NotFoundPage))
-
-  def updatePage(page: Page, model: Model): Model =
-    model.copy(currentPage = page)
 
   //
   // UPDATE
@@ -61,7 +58,7 @@ object Main {
   case class SearchPageMsg(pageMsg: page.Search.Msg) extends Msg
   case class WorkPageMsg(pageMsg: page.Work.Msg) extends Msg
 
-  def update(msg: Msg, model: Model): (Model, Seq[Cmd[Msg]]) =
+  def update(msg: Msg, model: Model): (Model, Cmd[Msg]) =
     (msg, model.currentPage) match {
       case (UrlChanged(url), _) =>
         applyUrlChange(url, model)
@@ -82,10 +79,10 @@ object Main {
           model
         )
 
-      case _ => (model, Seq())
+      case _ => (model, Cmd.none)
     }
 
-  def applyUrlChange(url: URL, model: Model): (Model, Seq[Cmd[Msg]]) =
+  def applyUrlChange(url: URL, model: Model): (Model, Cmd[Msg]) =
     url.pathname + url.search + url.hash match {
       case Route.searchWithQuery(q) =>
         applyPageUpdate(page.Search.init(q), SearchPage, SearchPageMsg, model)
@@ -97,36 +94,21 @@ object Main {
         applyPageUpdate(page.Work.init(id), WorkPage, WorkPageMsg, model)
 
       case _ =>
-        (model.copy(currentPage = NotFoundPage), Seq())
+        (model.copy(currentPage = NotFoundPage), Cmd.none)
     }
 
-  def applySubUpdate[SubModel, SubMsg](
-      subUpdate: (SubModel, Seq[Cmd[SubMsg]]),
-      applyModel: SubModel => Model,
-      applyMsg: SubMsg => Msg
-  ): (Model, Seq[Cmd[Msg]]) = {
-    val (subModel, subCmds) = subUpdate
-    (
-      applyModel(subModel),
-      subCmds.map(subCmd =>
-        subCmd.flatMap(optSubMsg =>
-          IO(optSubMsg.flatMap(subMsg => Some(applyMsg(subMsg))))
-        )
-      )
-    )
-  }
-
   def applyPageUpdate[PageModel, PageMsg](
-      subUpdate: (PageModel, Seq[Cmd[PageMsg]]),
+      pageUpdate: (PageModel, Cmd[PageMsg]),
       wrapModel: PageModel => Page,
       applyMsg: PageMsg => Msg,
       model: Model
-  ): (Model, Seq[Cmd[Msg]]) =
-    applySubUpdate[PageModel, PageMsg](
-      subUpdate,
-      wrapModel(_).pipe(updatePage(_, model)),
-      applyMsg
+  ): (Model, Cmd[Msg]) = {
+    val (pageModel, pageCmd) = pageUpdate
+    (
+      wrapModel(pageModel).pipe(model.setPage(_)),
+      pageCmd.map(applyMsg)
     )
+  }
 
   //
   // VIEW

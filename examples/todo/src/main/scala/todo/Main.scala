@@ -1,4 +1,4 @@
-package scalafui.todo
+package todo
 
 import scala.scalajs.LinkingInfo
 import scala.scalajs.js
@@ -10,12 +10,11 @@ import org.scalajs.dom.URL
 
 import cats.effect.IO
 
-import slinky.core._
 import slinky.core.facade.ReactElement
 import slinky.hot
 import slinky.web.html._
 
-import scalafui.FunctionalUI._
+import fui._
 
 @JSImport("/index.css", JSImport.Default)
 @js.native
@@ -28,10 +27,10 @@ object Main {
   //
 
   case class Model(
-      entries: Seq[Entry],
-      taskInput: String,
-      uid: Int,
-      visibility: String
+      entries: Seq[Entry] = Seq.empty,
+      taskInput: String = "",
+      uid: Int = 0,
+      visibility: String = "All"
   )
 
   case class Entry(
@@ -41,14 +40,6 @@ object Main {
       id: Int
   )
 
-  def emptyModel(): Model =
-    Model(
-      entries = Seq.empty,
-      taskInput = "",
-      uid = 0,
-      visibility = "All"
-    )
-
   def newEntry(description: String, id: Int): Entry =
     Entry(
       description = description,
@@ -57,7 +48,7 @@ object Main {
       id = id
     )
 
-  def init(url: URL): (Model, Seq[Cmd[Msg]]) = (emptyModel(), Seq())
+  def init(url: URL): (Model, Cmd[Msg]) = (Model(), Cmd.none)
 
   //
   // UPDATE
@@ -74,7 +65,7 @@ object Main {
   case class CheckAll(isCompleted: Boolean) extends Msg
   case class ChangeVisibility(visibility: String) extends Msg
 
-  def update(msg: Msg, model: Model): (Model, Seq[Cmd[Msg]]) = {
+  def update(msg: Msg, model: Model): (Model, Cmd[Msg]) = {
     msg match {
       case Add =>
         (
@@ -87,10 +78,10 @@ object Main {
               else
                 model.entries :+ newEntry(model.taskInput, model.uid)
           ),
-          Seq.empty
+          Cmd.none
         )
 
-      case UpdateInput(input) => (model.copy(taskInput = input), Seq.empty)
+      case UpdateInput(input) => (model.copy(taskInput = input), Cmd.none)
 
       case EditingEntry(id, isEditing) =>
         (
@@ -99,21 +90,19 @@ object Main {
               if (e.id == id) e.copy(editing = isEditing) else e
             )
           ),
-          Seq(
-            IO.async { cb =>
-              IO {
-                dom.document.getElementById("todo-" + id) match {
-                  case element: HTMLElement =>
-                    setTimeout(100) {
-                      element.focus()
-                      cb(Right(None))
-                    }
-                  case _ => cb(Right(None))
-                }
-                None
+          Cmd(IO.async { cb =>
+            IO {
+              dom.document.getElementById("todo-" + id) match {
+                case element: HTMLElement =>
+                  setTimeout(100) {
+                    element.focus()
+                    cb(Right(None))
+                  }
+                case _ => cb(Right(None))
               }
+              None
             }
-          )
+          })
         )
 
       case UpdateEntry(id, description) =>
@@ -123,19 +112,19 @@ object Main {
               if (e.id == id) e.copy(description = description) else e
             )
           ),
-          Seq.empty
+          Cmd.none
         )
 
       case Delete(id) =>
         (
           model.copy(entries = model.entries.filterNot(_.id == id)),
-          Seq.empty
+          Cmd.none
         )
 
       case DeleteComplete =>
         (
           model.copy(entries = model.entries.filterNot(_.completed)),
-          Seq.empty
+          Cmd.none
         )
 
       case Check(id, isCompleted) =>
@@ -145,7 +134,7 @@ object Main {
               if (e.id == id) e.copy(completed = isCompleted) else e
             )
           ),
-          Seq.empty
+          Cmd.none
         )
 
       case CheckAll(isCompleted) =>
@@ -153,11 +142,11 @@ object Main {
           model.copy(entries =
             model.entries.map(_.copy(completed = isCompleted))
           ),
-          Seq.empty
+          Cmd.none
         )
 
       case ChangeVisibility(visibility) =>
-        (model.copy(visibility = visibility), Seq.empty)
+        (model.copy(visibility = visibility), Cmd.none)
     }
   }
 

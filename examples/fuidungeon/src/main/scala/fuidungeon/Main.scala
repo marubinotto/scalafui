@@ -16,6 +16,7 @@ object Main {
   case class Model(game: Option[State] = None)
   sealed trait Msg
   case class Ready(seed: Long) extends Msg
+  case class FloorReady(seed: Long) extends Msg
   case class Act(action: Action) extends Msg
   case object Restart extends Msg
 
@@ -25,8 +26,17 @@ object Main {
   def init(@annotation.unused url: URL): (Model, Cmd[Msg]) = (Model(), newGame)
   def update(msg: Msg, model: Model): (Model, Cmd[Msg]) = msg match {
     case Ready(seed) if model.game.isEmpty => (Model(Some(initial(seed))), Cmd.none)
-    case Act(action) => (model.copy(game = model.game.map(Game.step(_, action))), Cmd.none)
-    case Restart if model.game.nonEmpty => (Model(), newGame)
+    case FloorReady(seed) if model.game.exists(_.status == Status.Descending) =>
+      (model.copy(game = model.game.map(Game.nextFloor(_, seed))), Cmd.none)
+    case Act(action) =>
+      val next = model.game.map(Game.step(_, action))
+      val descending = model.game.exists(_.status == Status.Playing) &&
+        next.exists(_.status == Status.Descending)
+      val command: Cmd[Msg] =
+        if (descending) Cmd.One(IO { Some(FloorReady(scala.util.Random.nextLong())) })
+        else Cmd.none
+      (model.copy(game = next), command)
+    case Restart if model.game.exists(_.status != Status.Descending) => (Model(), newGame)
     case _ => (model, Cmd.none)
   }
 
@@ -44,7 +54,7 @@ object Main {
       header(className := "masthead")(
         p(className := "eyebrow")("SCALAFUI / PLAYABLE EXAMPLE"),
         h1("fui", span("dungeon")),
-        p(className := "intro")("New rooms. One key. A way out.")
+        p(className := "intro")("Find the key. Descend deeper. Stay alive.")
       ),
       model.game.fold[ReactElement](div(className := "loading", role := "status")("Preparing the dungeon…")) { game =>
         val playing = game.status == Status.Playing
@@ -62,7 +72,8 @@ object Main {
         div(className := "game-layout")(
           section(className := "dungeon-panel")(
             div(className := "panel-heading")(
-              span("01 / THE DUNGEON"), span(s"TURN ${game.turns}")
+              span(className := "floor-number", aria-"live" := "polite")(f"FLOOR ${game.floor}%02d"),
+              span(className := "total-turns")(s"TOTAL TURNS ${game.turns}")
             ),
             div(className := "board", style := mapStyle, tabIndex := 0, role := "group",
               aria-"label" := "Dungeon. Use arrow keys or WASD to move, Space to wait.",
@@ -83,7 +94,7 @@ object Main {
                     else game.items.get(position) match {
                       case Some(Item.Key) => ("k", "key", "Key")
                       case Some(Item.Potion) => ("+", "potion", "Healing potion")
-                      case None if position == game.board.exit => (">", "exit", "Exit")
+                      case None if position == game.board.exit => (">", "exit", "Stairs")
                       case None if !game.board.isFloor(position) => ("#", "wall", "Wall")
                       case _ => ("·", "floor", "Floor")
                     }
@@ -93,7 +104,7 @@ object Main {
             ),
             p(className := "hint")("Click the map or Tab to focus · Arrow keys / WASD · Space to wait"),
             div(className := "legend")(
-              span("@ You"), span("g Goblin"), span("k Key"), span("+ Potion"), span("> Exit")
+              span("@ You"), span("g Goblin"), span("k Key"), span("+ Potion"), span("> Stairs")
             )
           ),
           aside(className := "sidebar")(
@@ -105,7 +116,7 @@ object Main {
               ),
               div(className := "stat")(span("KEY"), strong(if (game.hasKey) "Collected" else "Not found")),
               div(className := "stat")(span("GOBLINS"), strong(s"${game.enemies.size} remaining")),
-              p(className := "objective")("Find the key, then step onto > to escape. Walk into goblins to attack. Potions restore 4 HP.")
+              p(className := "objective")("Find this floor’s key, then step onto > to descend. Your HP carries over. Walk into goblins to attack; potions restore 4 HP.")
             ),
             section(className := "card controls-card")(
               h2("Make your move"),
@@ -124,11 +135,11 @@ object Main {
             div(className := s"result ${game.status.toString.toLowerCase}", role := "status")(
               game.status match {
                 case Status.Playing => "Your next move awaits."
-                case Status.Won => "You escaped! A fine expedition."
-                case Status.Lost => "Your expedition ends here. Try again."
+                case Status.Descending => f"Descending to floor ${game.floor + 1}%02d…"
+                case Status.Lost => s"Expedition over. Reached Floor ${game.floor} in ${game.turns} turns."
               }
             ),
-            button(className := "restart", onClick := (_ => dispatch(Restart)))("New expedition ↗")
+            button(className := "restart", disabled := (game.status == Status.Descending), onClick := (_ => dispatch(Restart)))("New expedition ↗")
           )
         )
       },

@@ -18,7 +18,7 @@ object Game {
     case Move(direction: Direction)
     case Wait
   }
-  enum Status { case Playing, Won, Lost }
+  enum Status { case Playing, Descending, Lost }
   enum Item { case Key, Potion }
   case class Enemy(id: Int, position: Pos, hp: Int = 4)
   case class Board(rows: Vector[String]) {
@@ -39,6 +39,7 @@ object Game {
       board: Board,
       player: Pos,
       hp: Int = maxHp,
+      floor: Int = 1,
       hasKey: Boolean = false,
       enemies: Vector[Enemy] = Vector.empty,
       items: Map[Pos, Item] = Map.empty,
@@ -84,6 +85,16 @@ object Game {
       items = itemPositions.zip(items).toMap)
   }
 
+  /** Only a pending descent can replace the floor; expedition progress survives. */
+  def nextFloor(state: State, seed: Long): State =
+    if (state.status != Status.Descending) state
+    else initial(seed).copy(
+      floor = state.floor + 1,
+      hp = state.hp,
+      turns = state.turns,
+      log = state.log
+    ).note(s"You enter floor ${state.floor + 1}. Find its key and keep descending.")
+
   def step(state: State, action: Action): State = {
     if (state.status != Status.Playing) state
     else {
@@ -110,7 +121,7 @@ object Game {
       }
       val advanced = afterPlayer.copy(turns = state.turns + 1)
       if (advanced.hasKey && advanced.player == advanced.board.exit)
-        advanced.copy(status = Status.Won).note("You unlocked the exit. You escaped!")
+        advanced.copy(status = Status.Descending, hasKey = false).note("You unlock the stairs and descend.")
       else enemyTurn(advanced)
     }
   }

@@ -15,11 +15,12 @@ class MainSpec extends AnyFunSuite {
   }
 
   test("restart clears previous progress and a new seed creates a fresh expedition") {
-    val old = initial(1).copy(hp = 0, hasKey = true, turns = 12, status = Status.Lost)
+    val old = initial(1).copy(hp = 0, hasKey = true, floor = 7, turns = 12, status = Status.Lost)
     val loading = update(Restart, Model(Some(old)))._1
     assert(loading.game.isEmpty)
     val restarted = update(Ready(2), loading)._1.game.get
     assert(restarted == initial(2))
+    assert(restarted.floor == 1 && restarted.hp == 10 && restarted.turns == 0)
     assert(restarted.items != old.items)
     assert(restarted.board != old.board)
   }

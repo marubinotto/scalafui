@@ -178,7 +178,8 @@ sbt> ~exampleStopwatch/fastLinkJS
 ### fuidungeon
 
 A small turn-based dungeon RPG with randomly generated rooms and corridors and
-an automatically following camera. Demonstrates pure game rules, immutable
+an automatically following camera. Carry your health between floors and see how
+deep you can descend. Demonstrates pure game rules, immutable
 state, and random initialization through `Cmd`.
 
 See the [fuidungeon README](examples/fuidungeon/README.md) for setup, controls,

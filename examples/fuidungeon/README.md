@@ -1,7 +1,8 @@
 # fuidungeon
 
 A small turn-based dungeon RPG built with Scalafui. Explore randomly generated
-rooms and corridors, find the key, and reach the exit. **New expedition** chooses
+rooms and corridors, find each floor’s key, and descend as far as you can before
+your HP runs out. **New expedition** chooses
 the room count, terrain, and placements automatically; there is no setup screen
 or save state.
 
@@ -48,11 +49,24 @@ movement after using a button.
 | `g` | Goblin |
 | `k` | Key |
 | `+` | Healing potion |
-| `>` | Exit |
+| `>` | Stairs to the next floor |
 
-Collect the key and step onto the exit to win. Without the key, the exit behaves
-like ordinary floor. HP reaching zero ends the expedition. After either result,
-game actions stop; **New expedition** resets all progress and generates a new map.
+Collect this floor’s key and step onto `>` to automatically descend to a new
+random floor. Without the key, the stairs behave like ordinary floor. Your HP,
+cumulative turn count, and recent journal entries carry over. The key is consumed;
+each floor has a new key, new goblins and potions, and a new starting position.
+There is no healing between floors and goblins do not act on arrival.
+
+The large **FLOOR 01** display shows the floor you have reached, starting at 1.
+There is no final victory or floor limit: aim to reach as deep as possible. HP
+reaching zero ends the expedition and displays your reached floor and total turns.
+Difficulty does not increase with depth; the same generation and combat rules
+apply on every floor. Records are not saved across expeditions or page reloads.
+
+During a descent, actions and restart are temporarily locked. Keyboard focus stays
+on the map if it was already there, and the camera follows the new starting
+position. **New expedition** resets HP, floor, turns, and journal and generates a
+new first floor.
 
 ## Turns and combat
 
@@ -66,8 +80,9 @@ game actions stop; **New expedition** resets all progress and generates a new ma
   Equal-length paths prefer up, right, down, then left. Moving does not also attack.
 - Keys and potions are collected automatically. A potion immediately restores
   4 HP, capped at 10, and is consumed even at full health.
-- Reaching the exit with the key wins before goblins act. Death immediately stops
-  the remaining goblin actions. The journal retains the six latest messages.
+- Reaching the stairs with the key spends a turn and starts descent before goblins
+  act. Death immediately stops the remaining goblin actions. The journal retains
+  the six latest messages, including floor arrivals.
 
 ## Random dungeons and camera
 
@@ -86,7 +101,7 @@ The exit is a floor farthest from the starting room's center by shortest path.
 For `n` generated rooms, there are `n − 3` goblins, `ceil(n / 2)` potions, and one
 key. Placements do not overlap or occupy the start or exit. Goblins start at least
 four path steps from you. Terrain reachability is guaranteed; identical difficulty
-and a winning strategy for every placement are not guaranteed.
+and survival through every placement are not guaranteed.
 
 The camera follows you instantly and stops at map edges. Tiles remain 28 px:
 a wide panel shows 15 × 15 tiles, while a panel narrower than 420 px shows 9 × 9.
@@ -104,7 +119,9 @@ stay outside the moving map; on narrow screens they appear below it.
 - [Camera.scala](src/main/scala/fuidungeon/Camera.scala): pure pixel-offset calculation
   for tracking, edge clamping, and centering small maps.
 - [Main.scala](src/main/scala/fuidungeon/Main.scala): Scalafui model/update/view and
-  seed acquisition through `Cmd`. Actions and restart are locked during loading.
+  seed acquisition through `Cmd` for initialization and descent. Only the transition
+  into descent emits a new seed command. Actions and restart are locked during
+  initialization and descent.
 - [index.css](index.css): clipped map and container-query viewport selection. Window
   dimensions are not part of the game model.
 
@@ -127,4 +144,5 @@ yarn preview
 
 The Vite production build invokes Scala.js full linking and writes `dist/`.
 Tests cover seeded generation and placement, bounded fallback behavior, camera
-edges and small maps, combat, item collection, victory, death, and restart.
+edges and small maps, combat, item collection, floor transitions and progress
+carryover, duplicate input during descent, death, and restart.

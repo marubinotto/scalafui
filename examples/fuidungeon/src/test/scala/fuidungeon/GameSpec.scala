@@ -44,13 +44,32 @@ class GameSpec extends AnyFunSuite {
     assert(full.hp == 10 && full.items.isEmpty)
   }
 
-  test("exit without key is floor; winning suppresses enemy attacks") {
+  test("exit without key is floor; descending consumes the key and suppresses enemy attacks") {
     val game = state.copy(player = Pos(6, 1), enemies = Vector(Enemy(0, Pos(7, 2))))
     val locked = step(game, move(Direction.Right))
     assert(locked.status == Status.Playing && locked.player == board.exit && locked.hp == 9)
-    val won = step(game.copy(hasKey = true), move(Direction.Right))
-    assert(won.status == Status.Won && won.hp == 10 && won.turns == 1)
-    assert(step(won, Action.Wait) == won)
+    val descending = step(game.copy(hasKey = true), move(Direction.Right))
+    assert(descending.status == Status.Descending && descending.hp == 10 && descending.turns == 1)
+    assert(!descending.hasKey && descending.floor == 1)
+    assert(step(descending, Action.Wait) == descending)
+  }
+
+  test("next floor regenerates local state while preserving expedition progress") {
+    val pending = state.copy(status = Status.Descending, floor = 3, hp = 4, turns = 42,
+      player = board.exit, items = Map.empty, enemies = Vector.empty,
+      log = Vector("one", "two", "three", "four", "five", "six"))
+    val next = nextFloor(pending, 42)
+    val fresh = initial(42)
+    assert(next == nextFloor(pending, 42))
+    assert(next.floor == 4 && next.hp == 4 && next.turns == 42)
+    assert(next.status == Status.Playing && !next.hasKey)
+    assert(next.board == fresh.board && next.player == fresh.board.start)
+    assert(next.enemies == fresh.enemies && next.items == fresh.items)
+    assert(next.log.take(5) == pending.log.tail && next.log.size == 6)
+    assert(next.log.last.contains("floor 4"))
+    assert(nextFloor(next, 99) == next)
+    val lost = next.copy(status = Status.Lost, hp = 0)
+    assert(nextFloor(lost, 99) == lost)
   }
 
   test("enemies pursue within five steps with deterministic ties but do not attack after moving") {

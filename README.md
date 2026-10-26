@@ -20,6 +20,10 @@ import slinky.core.facade.ReactElement
 import slinky.hot
 import slinky.web.html._
 
+import cats.effect.IO
+import cats.effect.std.Dispatcher
+import cats.effect.unsafe.implicits.global
+
 import fui._
 
 object Main {
@@ -82,16 +86,23 @@ object Main {
       )
     )
 
-  def main(args: Array[String]): Unit = {
-    if (LinkingInfo.developmentMode) {
-      hot.initialize()
-    }
+  def main(args: Array[String]): Unit =
+    run.unsafeRunAndForget()
 
-    Browser.runProgram(
-      dom.document.getElementById("app"),
-      Program(init, view, update)
-    )
-  }
+  def run: IO[Unit] =
+    Dispatcher.parallel[IO].use { dispatcher =>
+      IO {
+        if (LinkingInfo.developmentMode) {
+          hot.initialize()
+        }
+      } *> {
+        Browser.runProgram(
+          dom.document.getElementById("app"),
+          Program(init, view, update),
+          dispatcher
+        )
+      } *> IO.never
+    }
 }
 ```
 
@@ -194,3 +205,7 @@ Patterns match relative URLs containing a path, query and optional fragment. Req
 ## Rendering
 
 Scalafui uses React 18 and creates one React root per Runtime. Keep `react` and `react-dom` aligned at version 18.3.1 in applications.
+
+## Application lifetime
+
+`Browser.runProgram(container, program, dispatcher)` now returns `IO[Unit]`; execute it inside a long-lived `Dispatcher.parallel[IO].use` scope. The examples keep that scope alive with `IO.never` and run the outer IO from a standard `main` method. Runtime construction is effectful through `Runtime.make`; direct construction is no longer supported.

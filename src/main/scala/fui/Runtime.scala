@@ -6,23 +6,25 @@ import org.scalajs.dom.Element
 import org.scalajs.dom.URL
 import org.scalajs.dom.Event
 
-import cats.effect.unsafe.implicits.global
+import cats.effect.IO
+import cats.effect.std.Dispatcher
+import scala.compiletime.uninitialized
 
 import slinky.web.ReactDOMClient
 
-class Runtime[Model, Msg](
+class Runtime[Model, Msg] private (
     container: Element,
-    val program: Program[Model, Msg]
+    val program: Program[Model, Msg],
+    dispatcher: Dispatcher[IO]
 ) {
   private val reactRoot = ReactDOMClient.createRoot(container)
-  private val init = program.init(new URL(dom.window.location.href))
-  private var state = init._1
+  private var state: Model = uninitialized
   private val subs: MutableMap[String, Option[Sub.Unsubscribe]] = MutableMap()
   private val debounceTimers: MutableMap[String, Int] = MutableMap()
 
   def dispatch(msg: Msg): Unit = apply(program.update(msg, state))
 
-  def apply(change: (Model, Cmd[Msg])): Unit = {
+  private def apply(change: (Model, Cmd[Msg])): Unit = {
     val (model, cmd) = change
     state = model
 
@@ -43,10 +45,9 @@ class Runtime[Model, Msg](
     }
 
   private def runOne(cmd: Cmd.One[Msg]): Unit =
-    cmd.io.unsafeRunAsync {
-      case Right(optionMsg) => optionMsg.map(dispatch)
-      case Left(e) => throw e // IO should return Right even when it fails
-    }
+    dispatcher.unsafeRunAndForget(
+      cmd.io.flatMap(optionMsg => IO(optionMsg.foreach(dispatch)))
+    )
 
   private def updateSubs(model: Model): Unit = {
     val nextSubs = Sub.toMap(program.subscriptions(model))
@@ -71,12 +72,23 @@ class Runtime[Model, Msg](
   def onPushUrl(url: URL): Unit =
     program.onUrlChange.map(_(url)).map(dispatch)
 
-  program.onUrlChange.map(onUrlChange => {
-    dom.window.addEventListener(
-      "popstate",
-      (_: Event) => dispatch(onUrlChange(new URL(dom.window.location.href)))
-    )
-  })
+}
 
-  apply(init)
+object Runtime {
+  def make[Model, Msg](
+      container: Element,
+      program: Program[Model, Msg],
+      dispatcher: Dispatcher[IO]
+  ): IO[Runtime[Model, Msg]] = IO {
+    val runtime = new Runtime(container, program, dispatcher)
+    val init = program.init(new URL(dom.window.location.href))
+    program.onUrlChange.foreach(onUrlChange =>
+      dom.window.addEventListener(
+        "popstate",
+        (_: Event) => runtime.dispatch(onUrlChange(new URL(dom.window.location.href)))
+      )
+    )
+    runtime.apply(init)
+    runtime
+  }
 }

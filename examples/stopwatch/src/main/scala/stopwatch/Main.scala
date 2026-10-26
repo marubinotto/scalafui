@@ -13,6 +13,9 @@ import slinky.web.html._
 
 import cats.effect.IO
 
+import cats.effect.std.Dispatcher
+import cats.effect.unsafe.implicits.global
+
 import fui._
 
 object Main {
@@ -111,14 +114,21 @@ object Main {
     )
   }
 
-  def main(args: Array[String]): Unit = {
-    if (LinkingInfo.developmentMode) {
-      hot.initialize()
-    }
+  def main(args: Array[String]): Unit =
+    run.unsafeRunAndForget()
 
-    Browser.runProgram(
-      dom.document.getElementById("app"),
-      Program(init, view, update, subscriptions)
-    )
-  }
+  def run: IO[Unit] =
+    Dispatcher.parallel[IO].use { dispatcher =>
+      IO {
+        if (LinkingInfo.developmentMode) {
+          hot.initialize()
+        }
+      } *> {
+        Browser.runProgram(
+          dom.document.getElementById("app"),
+          Program(init, view, update, subscriptions),
+          dispatcher
+        )
+      } *> IO.never
+    }
 }

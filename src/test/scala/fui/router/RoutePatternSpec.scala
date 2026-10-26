@@ -92,4 +92,23 @@ class RoutePatternSpec extends AnyFunSuite {
   test("malformed path encoding does not throw") {
     assert(node.unapply("/nodes/%ZZ").isEmpty)
   }
+
+  test("six mixed route arguments remain a flat typed tuple") {
+    val inferred =
+      Root / Arg[String]() / Arg[Int]() / Arg[Long]() &
+        Param[Boolean]("enabled") & Param[Double]("score") & Param[String]("query")
+    val route: RoutePattern[(String, Int, Long, Boolean, Double, String)] = inferred
+    val value = ("item/1", 2, 3L, true, 4.5, "日本語 & +")
+    assert(route.unapply(route.url(value)).contains(value))
+  }
+
+  test("tuple appenders preserve types and split the appended value") {
+    val empty = summon[Appender[EmptyTuple, Int, Tuple1[Int]]]
+    assert(empty.split(empty.append(EmptyTuple, 1)) == (EmptyTuple, 1))
+    val single = summon[Appender[Tuple1[String], Int, (String, Int)]]
+    assert(single.split(single.append(Tuple1("a"), 1)) == (Tuple1("a"), 1))
+    val tuple = summon[Appender[(String, Int), (Boolean, Long), (String, Int, (Boolean, Long))]]
+    assert(tuple.split(tuple.append(("a", 1), (true, 2L))) == (("a", 1), (true, 2L)))
+  }
+
 }

@@ -35,7 +35,7 @@ lazy val commonSettings = Seq(
     "org.scala-lang" % "tasty-core_3" % scala3Version
   ),
   libraryDependencies ++= Seq(
-    "org.scala-js" %%% "scalajs-dom" % "2.8.0",
+    "org.scala-js" %%% "scalajs-dom" % "2.8.1",
     "org.scala-js" %%% "scala-js-macrotask-executor" % "1.1.1",
     "me.shadaj" %%% "slinky-web" % slinkyVersion,
     "me.shadaj" %%% "slinky-hot" % slinkyVersion,

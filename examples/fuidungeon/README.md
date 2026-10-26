@@ -43,16 +43,16 @@ movement after using a button.
 
 | Symbol | Meaning |
 | --- | --- |
-| `@` | You |
+| 🤠 | You |
 | `#` | Wall |
 | `·` | Floor |
-| `g` | Goblin |
-| `k` | Key |
-| `+` | Healing potion |
-| `>` | Stairs to the next floor |
+| 👺 | Goblin |
+| 🔑 | Key |
+| 🧪 | Healing potion |
+| 🚪 | Next floor |
 
-Collect this floor’s key and step onto `>` to automatically descend to a new
-random floor. Without the key, the stairs behave like ordinary floor. Your HP,
+Collect this floor’s key and step onto 🚪 to automatically descend to a new
+random floor. Without the key, the door behave like ordinary floor. Your HP,
 cumulative turn count, and recent journal entries carry over. The key is consumed;
 each floor has a new key, new goblins and potions, and a new starting position.
 There is no healing between floors and goblins do not act on arrival.
@@ -80,7 +80,7 @@ new first floor.
   Equal-length paths prefer up, right, down, then left. Moving does not also attack.
 - Keys and potions are collected automatically. A potion immediately restores
   4 HP, capped at 10, and is consumed even at full health.
-- Reaching the stairs with the key spends a turn and starts descent before goblins
+- Reaching the door with the key spends a turn and starts descent before goblins
   act. Death immediately stops the remaining goblin actions. The journal retains
   the six latest messages, including floor arrivals.
 
@@ -96,10 +96,10 @@ Generation has a bounded number of placement attempts. If it cannot reach the
 target, it keeps at least six accepted rooms; if fewer than six fit, it builds a
 six-room chain instead. The final map tightly encloses all floors with a one-tile
 wall border. Width and height vary, up to 64 × 64 tiles. All floors are connected.
-The exit is a floor farthest from the starting room's center by shortest path.
+The door to the next floor is a floor farthest from the starting room's center by shortest path.
 
 For `n` generated rooms, there are `n − 3` goblins, `ceil(n / 2)` potions, and one
-key. Placements do not overlap or occupy the start or exit. Goblins start at least
+key. Placements do not overlap or occupy the start or door. Goblins start at least
 four path steps from you. Terrain reachability is guaranteed; identical difficulty
 and survival through every placement are not guaranteed.
 
@@ -108,6 +108,9 @@ a wide panel shows 15 × 15 tiles, while a panel narrower than 420 px shows 9 ×
 A map dimension smaller than the viewport is centered. There is no manual map
 scrolling, fog of war, exploration history, or minimap. Stats, controls, and notes
 stay outside the moving map; on narrow screens they appear below it.
+
+Emoji use the system’s built-in fonts and may look different across operating
+systems and browsers. Walls and floors remain text symbols.
 
 ## Implementation
 

@@ -89,12 +89,12 @@ object Main {
                   x <- 0 until game.board.width
                   position = Pos(x, y)
                   appearance =
-                    if (position == game.player) ("@", "player", "You")
-                    else if (game.enemies.exists(_.position == position)) ("g", "enemy", "Goblin")
+                    if (position == game.player) ("🤠", "player", "You")
+                    else if (game.enemies.exists(_.position == position)) ("👺", "enemy", "Goblin")
                     else game.items.get(position) match {
-                      case Some(Item.Key) => ("k", "key", "Key")
-                      case Some(Item.Potion) => ("+", "potion", "Healing potion")
-                      case None if position == game.board.exit => (">", "exit", "Stairs")
+                      case Some(Item.Key) => ("🔑", "key", "Key")
+                      case Some(Item.Potion) => ("🧪", "potion", "Healing potion")
+                      case None if position == game.board.exit => ("🚪", "exit", "Next floor")
                       case None if !game.board.isFloor(position) => ("#", "wall", "Wall")
                       case _ => ("·", "floor", "Floor")
                     }
@@ -104,7 +104,7 @@ object Main {
             ),
             p(className := "hint")("Click the map or Tab to focus · Arrow keys / WASD · Space to wait"),
             div(className := "legend")(
-              span("@ You"), span("g Goblin"), span("k Key"), span("+ Potion"), span("> Stairs")
+              span("🤠 You"), span("👺 Goblin"), span("🔑 Key"), span("🧪 Potion"), span("🚪 Next floor")
             )
           ),
           aside(className := "sidebar")(
@@ -116,7 +116,7 @@ object Main {
               ),
               div(className := "stat")(span("KEY"), strong(if (game.hasKey) "Collected" else "Not found")),
               div(className := "stat")(span("GOBLINS"), strong(s"${game.enemies.size} remaining")),
-              p(className := "objective")("Find this floor’s key, then step onto > to descend. Your HP carries over. Walk into goblins to attack; potions restore 4 HP.")
+              p(className := "objective")("Find this floor’s key, then step onto 🚪 to descend. Your HP carries over. Walk into goblins to attack; potions restore 4 HP.")
             ),
             section(className := "card controls-card")(
               h2("Make your move"),

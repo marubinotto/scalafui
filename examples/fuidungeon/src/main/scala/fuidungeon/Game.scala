@@ -45,7 +45,7 @@ object Game {
       items: Map[Pos, Item] = Map.empty,
       status: Status = Status.Playing,
       turns: Int = 0,
-      log: Vector[String] = Vector("Find the key and reach the exit.")
+      log: Vector[String] = Vector("Find the key and reach the door to the next floor.")
   ) {
     def note(message: String): State = copy(log = (log :+ message).takeRight(6))
   }
@@ -121,7 +121,7 @@ object Game {
       }
       val advanced = afterPlayer.copy(turns = state.turns + 1)
       if (advanced.hasKey && advanced.player == advanced.board.exit)
-        advanced.copy(status = Status.Descending, hasKey = false).note("You unlock the stairs and descend.")
+        advanced.copy(status = Status.Descending, hasKey = false).note("You unlock the door and descend.")
       else enemyTurn(advanced)
     }
   }

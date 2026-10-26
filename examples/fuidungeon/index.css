@@ -23,7 +23,7 @@ h1 span { color: #dfbd76; }
 }
 .wall { color: #566448; background: #2c3928; box-shadow: inset 0 0 0 1px #33422d; }
 .floor { color: #354331; }
-.player { background: #e4bf6e; color: #182017; border-radius: 4px; font-weight: bold; }
+.player { background: transparent; }
 .enemy { color: #f58e7b; background: #34221d; }
 .key, .exit { color: #f1cf7a; background: #35321c; }
 .potion { color: #a7d5ba; background: #1d3329; }
@@ -60,3 +60,6 @@ footer { margin-top: 28px; color: #8e9e84; font-size: 10px; }
   .control { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .health-fill { transition: none; } }
+
+.tile:is(.player, .enemy, .key, .potion, .exit) { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; font-weight: normal; }
+.legend > span { white-space: nowrap; }

@@ -190,3 +190,7 @@ paged.url(("123", "Scala", 2)) // /work/123?query=Scala&page=2
 ```
 
 Patterns match relative URLs containing a path, query and optional fragment. Required query parameters must be present and decode successfully; empty strings are valid. The first repeated value wins, unknown parameters and fragments are ignored, and path-only routes also match URLs with queries. Order more specific query patterns before path-only fallbacks. Both path arguments and query values use `Codec`; query encoding follows `URLSearchParams`.
+
+## Rendering
+
+Scalafui uses React 18 and creates one React root per Runtime. Keep `react` and `react-dom` aligned at version 18.3.1 in applications.

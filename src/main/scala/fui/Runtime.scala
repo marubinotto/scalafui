@@ -8,12 +8,13 @@ import org.scalajs.dom.Event
 
 import cats.effect.unsafe.implicits.global
 
-import slinky.web.ReactDOM
+import slinky.web.ReactDOMClient
 
 class Runtime[Model, Msg](
     container: Element,
     val program: Program[Model, Msg]
 ) {
+  private val reactRoot = ReactDOMClient.createRoot(container)
   private val init = program.init(new URL(dom.window.location.href))
   private var state = init._1
   private val subs: MutableMap[String, Option[Sub.Unsubscribe]] = MutableMap()
@@ -25,7 +26,7 @@ class Runtime[Model, Msg](
     val (model, cmd) = change
     state = model
 
-    ReactDOM.render(program.view(model, dispatch), container)
+    reactRoot.render(program.view(model, dispatch))
     run(cmd)
     updateSubs(state)
   }

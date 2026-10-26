@@ -10,10 +10,6 @@ or save state.
 
 ## Run locally
 
-Requirements: sbt, Node.js 22.22.2+ (22.x), 24.15.0+ (24.x), or 26+, and Yarn
-Classic 1.22.x. Keep `sbt` and Java available on your `PATH`, including to Node
-child processes: the Vite plugin invokes sbt.
-
 From the repository root, install the test dependencies once:
 
 ```sh
@@ -57,96 +53,6 @@ random floor. Without the key, the door behave like ordinary floor. Your HP,
 cumulative turn count, and recent journal entries carry over. The key is consumed;
 each floor has a new key, new enemies and potions, and a new starting position.
 There is no healing between floors and enemies do not act on arrival.
-
-The large **FLOOR 01** display shows the floor you have reached, starting at 1.
-There is no final victory or floor limit: aim to reach as deep as possible. HP
-reaching zero ends the expedition and displays your reached floor and total turns.
-Deeper floors contain a higher proportion of stronger enemy types. Enemy counts,
-potion counts, and each species’ stats do not scale with depth. Records are not saved across expeditions or page reloads.
-
-During a descent, actions and restart are temporarily locked. Keyboard focus stays
-on the map if it was already there, and the camera follows the new starting
-position. **New expedition** resets HP, floor, turns, and journal and generates a
-new first floor.
-
-## Turns and combat
-
-- Start with 10 HP. Moving, attacking, or waiting spends one turn. Walking into a
-  wall does not spend a turn.
-- Walk toward an enemy to deal 2 damage without moving. Defeated enemies are
-  removed immediately and cannot retaliate.
-- After your action, surviving enemies act in ID order. Goblins and ogres attack
-  when adjacent, otherwise they move one step along a route of at most five steps
-  toward you. Other enemies block routes; ties prefer up, right, down, then left.
-  Moving does not also attack for these species.
-- Cave bats take two consecutive actions regardless of distance. At the start of
-  each action they attack if adjacent; otherwise they choose uniformly among
-  free neighboring floors, or wait if trapped. They can move then attack, or
-  attack twice. They never move into you or another enemy.
-- Keys and potions are collected automatically. A potion immediately restores
-  4 HP, capped at 10, and is consumed even at full health.
-- Reaching the door with the key spends a turn and starts descent before enemies
-  act. Death immediately stops the remaining enemy actions. The journal retains
-  the six latest messages, including floor arrivals.
-
-Actions appear in order: your action, then enemies in ID order (including each
-of a Cave Bat’s two actions). Attacks display for 200 ms; movement and your wait
-display for 60 ms. Idle enemies add no delay. HP, positions, and journal entries
-update at each action. Inputs are ignored and movement buttons disabled until
-the final action finishes; inputs are not queued. **New expedition** can cancel
-playback, except while generating the next floor.
-
-Damage briefly turns the affected character’s tile red for 200 ms. Defeated enemies leave a short visual afterimage, but are removed
-from combat immediately. Repeated hits refresh the effect; changing floors or
-starting a new expedition clears it.
-
-## Monsters and depth
-
-| Monster | HP | Damage | Actions per turn |
-| --- | ---: | --- | ---: |
-| 👺 Goblin | 4 | 1 | 1 |
-| 🦇 Cave Bat | 4 | 1 | 2 |
-| 👹 Ogre | 8 | Random integer 1–3, equally likely per attack | 1 |
-
-Names appear in tooltips and combat logs, including the damage dealt. Each enemy
-is drawn independently using these probabilities; intermediate floors linearly
-interpolate between the rows. Floor 10 and deeper use the final row. Actual
-counts vary with the draw rather than enforcing quotas.
-
-| Floor | Goblin | Cave Bat | Ogre |
-| --- | ---: | ---: | ---: |
-| 1 | 100% | 0% | 0% |
-| 3 | 70% | 30% | 0% |
-| 5 | 45% | 40% | 15% |
-| 10+ | 15% | 45% | 40% |
-
-## Random dungeons and camera
-
-Each expedition randomly targets 6–10 rooms, each 4–7 tiles wide and high. New
-rooms attach above, right, below, or left of existing rooms, with 1–3 tiles between
-them. Connected L-shaped corridors and up to two extra room connections create
-branches and possible alternative routes. Corridors may cross other corridors
-or rooms.
-
-Generation has a bounded number of placement attempts. If it cannot reach the
-target, it keeps at least six accepted rooms; if fewer than six fit, it builds a
-six-room chain instead. The final map tightly encloses all floors with a one-tile
-wall border. Width and height vary, up to 64 × 64 tiles. All floors are connected.
-The door to the next floor is a floor farthest from the starting room's center by shortest path.
-
-For `n` generated rooms, there are `n − 3` enemies, `ceil(n / 2)` potions, and one
-key. Placements do not overlap or occupy the start or door. Enemies start at least
-four path steps from you. Terrain reachability is guaranteed; identical difficulty
-and survival through every placement are not guaranteed.
-
-The camera follows you instantly and stops at map edges. Tiles remain 28 px:
-a wide panel shows 15 × 15 tiles, while a panel narrower than 420 px shows 9 × 9.
-A map dimension smaller than the viewport is centered. There is no manual map
-scrolling, fog of war, exploration history, or minimap. Stats, controls, and notes
-stay outside the moving map; on narrow screens they appear below it.
-
-Emoji use the system’s built-in fonts and may look different across operating
-systems and browsers. Walls and floors remain text symbols.
 
 ## Implementation
 

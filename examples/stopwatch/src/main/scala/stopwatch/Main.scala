@@ -1,6 +1,6 @@
 package stopwatch
 
-import scala.util.chaining._
+import scala.util.chaining.*
 import scala.scalajs.LinkingInfo
 import org.scalajs.dom
 import org.scalajs.dom.URL
@@ -9,14 +9,14 @@ import scala.concurrent.duration.DurationInt
 
 import slinky.core.facade.ReactElement
 import slinky.hot
-import slinky.web.html._
+import slinky.web.html.*
 
 import cats.effect.IO
 
 import cats.effect.std.Dispatcher
 import cats.effect.unsafe.implicits.global
 
-import fui._
+import fui.*
 
 object Main {
 

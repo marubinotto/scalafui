@@ -1,6 +1,6 @@
 package fui
 
-import scala.collection.mutable.{Map => MutableMap}
+import scala.collection.mutable.{Map as MutableMap}
 import scala.compiletime.uninitialized
 import scala.concurrent.Future
 import org.scalajs.dom
@@ -44,7 +44,7 @@ class Runtime[Model, Msg] private (
         debounceTimers.put(key, timer)
       }
       case cmd: Cmd.One[Msg]    => runOne(cmd)
-      case Cmd.Batch(cmds @ _*) => for (cmd <- cmds) run(cmd)
+      case Cmd.Batch(cmds*) => for (cmd <- cmds) run(cmd)
     }
 
   private def runOne(cmd: Cmd.One[Msg]): Unit =

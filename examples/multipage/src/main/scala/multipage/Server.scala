@@ -1,10 +1,10 @@
 package multipage
 
-import io.circe._
+import io.circe.*
 
 import scala.scalajs.js.URIUtils
 
-import fui._
+import fui.*
 
 import multipage.domain.Work
 import multipage.domain.Edition

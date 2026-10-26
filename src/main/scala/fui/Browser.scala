@@ -1,24 +1,24 @@
 package fui
 
 import scala.util.{Failure, Success}
-import scala.concurrent._
+import scala.concurrent.*
 import scala.scalajs.js
-import scala.scalajs.js.JSStringOps._
+import scala.scalajs.js.JSStringOps.*
 import org.scalajs.dom
 import org.scalajs.dom.{Element, URL}
 
 import cats.effect.IO
 import cats.effect.std.Dispatcher
 
-import io.circe._
-import io.circe.parser._
+import io.circe.*
+import io.circe.parser.*
 
 object Browser {
   // https://github.com/scala-js/scala-js-macrotask-executor
-  import org.scalajs.macrotaskexecutor.MacrotaskExecutor.Implicits._
+  import org.scalajs.macrotaskexecutor.MacrotaskExecutor.Implicits.*
 
   // https://www.scala-js.org/api/scalajs-library/1.12.0/scala/scalajs/js/Thenable$$Implicits$.html
-  import js.Thenable.Implicits._
+  import js.Thenable.Implicits.*
 
   private var listenersOnPushUrl: List[URL => Unit] = Nil
 

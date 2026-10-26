@@ -3,7 +3,7 @@ package fui
 import scala.util.{Failure, Success}
 import scala.concurrent.Future
 import cats.effect.IO
-import cats.implicits._
+import cats.implicits.*
 
 sealed trait Cmd[+Msg] extends Any {
   def map[OtherMsg](f: Msg => OtherMsg): Cmd[OtherMsg]
@@ -11,7 +11,7 @@ sealed trait Cmd[+Msg] extends Any {
 }
 
 object Cmd {
-  import org.scalajs.macrotaskexecutor.MacrotaskExecutor.Implicits._
+  import org.scalajs.macrotaskexecutor.MacrotaskExecutor.Implicits.*
 
   def apply[Msg](io: IO[Option[Msg]]): One[Msg] = One(io)
 
@@ -29,7 +29,7 @@ object Cmd {
     override def ++[LubMsg >: Msg](that: Cmd[LubMsg]): Cmd[LubMsg] =
       that match {
         case o: One[LubMsg]         => Batch(this, o)
-        case Batch(cmds @ _*)       => Batch.fromSeq(this +: cmds)
+        case Batch(cmds*)       => Batch.fromSeq(this +: cmds)
       }
 
     def toNone[OtherMsg]: One[OtherMsg] = One(io.map(_ => None))
@@ -58,7 +58,7 @@ object Cmd {
     override def ++[LubMsg >: Msg](that: Cmd[LubMsg]): Cmd[LubMsg] =
       that match {
         case o: One[LubMsg]         => Batch.fromSeq(cmds :+ o)
-        case Batch(cmds @ _*)       => Batch.fromSeq(this.cmds ++ cmds)
+        case Batch(cmds*)       => Batch.fromSeq(this.cmds ++ cmds)
       }
   }
 

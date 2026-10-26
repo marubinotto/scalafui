@@ -3,9 +3,9 @@ package multipage.page
 import scala.scalajs.js
 
 import slinky.core.facade.ReactElement
-import slinky.web.html._
+import slinky.web.html.*
 
-import fui._
+import fui.*
 
 import multipage.domain
 import multipage.Server

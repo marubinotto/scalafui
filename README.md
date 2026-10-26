@@ -163,3 +163,9 @@ $ yarn run dev
 ```console
 sbt> ~exampleStopwatch/fastLinkJS
 ```
+
+## Browser commands
+
+`Browser.ajaxHead(url)` returns an `Either[Throwable, dom.Response]`; inspect the response status in your update function.
+`Browser.setLocalStorage(key, value)` and `removeLocalStorage(key)` perform storage operations without emitting a message.
+`Browser.getLocalStorage(key)` emits `Option[String]`, including `None` for a missing key.

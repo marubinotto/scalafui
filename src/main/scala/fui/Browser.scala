@@ -121,9 +121,46 @@ object Browser {
       }
     })
 
+  def ajaxHead(url: String): Cmd.One[Either[Throwable, dom.Response]] =
+    Cmd(IO.async { cb =>
+      IO {
+        dom.fetch(
+          url,
+          new dom.RequestInit {
+            method = dom.HttpMethod.HEAD
+          }
+        ).onComplete {
+          case Success(response) => {
+            cb(Right(Some(Right(response))))
+          }
+          case Failure(t) => {
+            cb(Right(Some(Left(t))))
+          }
+        }
+        None // no finalizer on cancellation
+      }
+    })
+
   def setHtmlTheme[Msg](theme: String): Cmd.One[Msg] =
     Cmd(IO {
       dom.window.document.documentElement.setAttribute("data-theme", theme)
+      None
+    })
+
+  def setLocalStorage[Msg](key: String, value: String): Cmd.One[Msg] =
+    Cmd(IO {
+      dom.window.localStorage.setItem(key, value)
+      None
+    })
+
+  def getLocalStorage(key: String): Cmd.One[Option[String]] =
+    Cmd(IO {
+      Some(Option(dom.window.localStorage.getItem(key)))
+    })
+
+  def removeLocalStorage[Msg](key: String): Cmd.One[Msg] =
+    Cmd(IO {
+      dom.window.localStorage.removeItem(key)
       None
     })
 

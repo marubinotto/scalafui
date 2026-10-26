@@ -209,3 +209,9 @@ Scalafui uses React 18 and creates one React root per Runtime. Keep `react` and 
 ## Application lifetime
 
 `Browser.runProgram(container, program, dispatcher)` now returns `IO[Unit]`; execute it inside a long-lived `Dispatcher.parallel[IO].use` scope. The examples keep that scope alive with `IO.never` and run the outer IO from a standard `main` method. Runtime construction is effectful through `Runtime.make`; direct construction is no longer supported.
+
+Messages are queued: `dispatch` schedules an update rather than updating the model synchronously. The initial view and subscriptions are set up before the initial command runs. Commands remain independently scheduled; the message queue does not guarantee command completion order.
+
+## Tests
+
+Run `yarn install` at the repository root, then `sbt test`. Runtime tests use jsdom; browser command tests stub storage and fetch. Tests run serially because they install temporary browser globals.

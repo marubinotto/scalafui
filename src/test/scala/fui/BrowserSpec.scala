@@ -4,7 +4,22 @@ import scala.scalajs.js
 import cats.effect.unsafe.implicits.global
 import org.scalatest.funsuite.AsyncFunSuite
 
-class BrowserSpec extends AsyncFunSuite {
+class BrowserSpec extends AsyncFunSuite with org.scalatest.BeforeAndAfterAll {
+  private var previousWindow: js.Any = js.undefined
+  private var previousFetch: js.Any = js.undefined
+
+  override protected def beforeAll(): Unit = {
+    super.beforeAll()
+    previousWindow = js.Dynamic.global.globalThis.window
+    previousFetch = js.Dynamic.global.globalThis.fetch
+  }
+
+  override protected def afterAll(): Unit = {
+    js.Dynamic.global.globalThis.window = previousWindow
+    js.Dynamic.global.globalThis.fetch = previousFetch
+    super.afterAll()
+  }
+
   override implicit def executionContext: scala.concurrent.ExecutionContext =
     org.scalajs.macrotaskexecutor.MacrotaskExecutor
 

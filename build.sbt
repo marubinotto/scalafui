@@ -8,6 +8,7 @@ val slinkyVersion = "0.7.5"
 
 lazy val commonSettings = Seq(
   scalaModuleInfo := scalaModuleInfo.value.map(_.withOverrideScalaVersion(true)),
+  Test / parallelExecution := false,
   scalacOptions ++= Seq(
     "-encoding",
     "utf-8",

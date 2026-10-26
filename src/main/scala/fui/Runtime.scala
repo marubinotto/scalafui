@@ -1,6 +1,7 @@
 package fui
 
 import scala.collection.mutable.{Map => MutableMap}
+import scala.compiletime.uninitialized
 import org.scalajs.dom
 import org.scalajs.dom.Element
 import org.scalajs.dom.URL
@@ -8,26 +9,27 @@ import org.scalajs.dom.Event
 
 import cats.effect.IO
 import cats.effect.std.Dispatcher
-import scala.compiletime.uninitialized
+import cats.effect.std.Queue
 
 import slinky.web.ReactDOMClient
 
 class Runtime[Model, Msg] private (
     container: Element,
     val program: Program[Model, Msg],
-    dispatcher: Dispatcher[IO]
+    dispatcher: Dispatcher[IO],
+    queue: Queue[IO, Msg]
 ) {
   private val reactRoot = ReactDOMClient.createRoot(container)
   private var state: Model = uninitialized
   private val subs: MutableMap[String, Option[Sub.Unsubscribe]] = MutableMap()
   private val debounceTimers: MutableMap[String, Int] = MutableMap()
 
-  def dispatch(msg: Msg): Unit = apply(program.update(msg, state))
+  def dispatch(msg: Msg): Unit =
+    dispatcher.unsafeRunAndForget(queue.offer(msg))
 
   private def apply(change: (Model, Cmd[Msg])): Unit = {
     val (model, cmd) = change
     state = model
-
     reactRoot.render(program.view(model, dispatch))
     run(cmd)
     updateSubs(state)
@@ -40,13 +42,13 @@ class Runtime[Model, Msg] private (
         val timer = dom.window.setTimeout(() => runOne(cmd), delay)
         debounceTimers.put(key, timer)
       }
-      case cmd: Cmd.One[Msg]          => runOne(cmd)
-      case Cmd.Batch(cmds @ _*)       => for (cmd <- cmds) run(cmd)
+      case cmd: Cmd.One[Msg]    => runOne(cmd)
+      case Cmd.Batch(cmds @ _*) => for (cmd <- cmds) run(cmd)
     }
 
   private def runOne(cmd: Cmd.One[Msg]): Unit =
     dispatcher.unsafeRunAndForget(
-      cmd.io.flatMap(optionMsg => IO(optionMsg.foreach(dispatch)))
+      cmd.io.flatMap(optionMsg => IO(optionMsg.foreach(msg => dispatch(msg))))
     )
 
   private def updateSubs(model: Model): Unit = {
@@ -72,6 +74,10 @@ class Runtime[Model, Msg] private (
   def onPushUrl(url: URL): Unit =
     program.onUrlChange.map(_(url)).map(dispatch)
 
+  private def processNextMessage: IO[Unit] =
+    queue.take.flatMap { msg =>
+      IO(apply(program.update(msg, state))) *> IO.cede
+    }
 }
 
 object Runtime {
@@ -79,16 +85,28 @@ object Runtime {
       container: Element,
       program: Program[Model, Msg],
       dispatcher: Dispatcher[IO]
-  ): IO[Runtime[Model, Msg]] = IO {
-    val runtime = new Runtime(container, program, dispatcher)
-    val init = program.init(new URL(dom.window.location.href))
-    program.onUrlChange.foreach(onUrlChange =>
-      dom.window.addEventListener(
-        "popstate",
-        (_: Event) => runtime.dispatch(onUrlChange(new URL(dom.window.location.href)))
+  ): IO[Runtime[Model, Msg]] =
+    for {
+      queue <- Queue.unbounded[IO, Msg]
+      runtime = new Runtime(container, program, dispatcher, queue)
+      init = program.init(new URL(dom.window.location.href))
+      _ <- IO {
+        runtime.state = init._1
+        program.onUrlChange.foreach(onUrlChange =>
+          dom.window.addEventListener(
+            "popstate",
+            (_: Event) => runtime.dispatch(
+              onUrlChange(new URL(dom.window.location.href))
+            )
+          )
+        )
+        runtime.apply((init._1, Cmd.none))
+      }
+      _ <- IO(
+        dispatcher.unsafeRunAndForget(
+          runtime.processNextMessage.foreverM
+        )
       )
-    )
-    runtime.apply(init)
-    runtime
-  }
+      _ <- IO(runtime.run(init._2))
+    } yield runtime
 }

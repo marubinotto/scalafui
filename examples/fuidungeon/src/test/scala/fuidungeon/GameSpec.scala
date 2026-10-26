@@ -59,7 +59,7 @@ class GameSpec extends AnyFunSuite {
       player = board.exit, items = Map.empty, enemies = Vector.empty,
       log = Vector("one", "two", "three", "four", "five", "six"))
     val next = nextFloor(pending, 42)
-    val fresh = initial(42)
+    val fresh = initialFloor(42, 4)
     assert(next == nextFloor(pending, 42))
     assert(next.floor == 4 && next.hp == 4 && next.turns == 42)
     assert(next.status == Status.Playing && !next.hasKey)
@@ -104,7 +104,7 @@ class GameSpec extends AnyFunSuite {
     assert(lost.hp == 0 && lost.status == Status.Lost)
     assert(lost.enemies(1) == game.enemies(1))
     assert(step(lost, move(Direction.Down)) == lost)
-    assert(lost.log.count(_ == "A goblin hits you for 1.") == 1)
+    assert(lost.log.count(_ == "Goblin hits you for 1.") == 1)
   }
 
   test("the journal retains only its six most recent messages") {

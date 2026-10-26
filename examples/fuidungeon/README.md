@@ -48,7 +48,6 @@ movement after using a button.
 | 🤠 | You |
 | `#` | Wall |
 | `·` | Floor |
-| 👺 | Goblin |
 | 🔑 | Key |
 | 🧪 | Healing potion |
 | 🚪 | Next floor |
@@ -56,14 +55,14 @@ movement after using a button.
 Collect this floor’s key and step onto 🚪 to automatically descend to a new
 random floor. Without the key, the door behave like ordinary floor. Your HP,
 cumulative turn count, and recent journal entries carry over. The key is consumed;
-each floor has a new key, new goblins and potions, and a new starting position.
-There is no healing between floors and goblins do not act on arrival.
+each floor has a new key, new enemies and potions, and a new starting position.
+There is no healing between floors and enemies do not act on arrival.
 
 The large **FLOOR 01** display shows the floor you have reached, starting at 1.
 There is no final victory or floor limit: aim to reach as deep as possible. HP
 reaching zero ends the expedition and displays your reached floor and total turns.
-Difficulty does not increase with depth; the same generation and combat rules
-apply on every floor. Records are not saved across expeditions or page reloads.
+Deeper floors contain a higher proportion of stronger enemy types. Enemy counts,
+potion counts, and each species’ stats do not scale with depth. Records are not saved across expeditions or page reloads.
 
 During a descent, actions and restart are temporarily locked. Keyboard focus stays
 on the map if it was already there, and the camera follows the new starting
@@ -74,22 +73,46 @@ new first floor.
 
 - Start with 10 HP. Moving, attacking, or waiting spends one turn. Walking into a
   wall does not spend a turn.
-- Walk toward a goblin to deal 2 damage without moving. Goblins have 4 HP; a
-  defeated goblin cannot retaliate.
-- After your action, surviving goblins act in their fixed ID order. An adjacent
-  goblin deals 1 damage. Otherwise, if a route to you is at most five steps long,
-  it moves one step closer. Other goblins block the route; they never overlap.
-  Equal-length paths prefer up, right, down, then left. Moving does not also attack.
+- Walk toward an enemy to deal 2 damage without moving. Defeated enemies are
+  removed immediately and cannot retaliate.
+- After your action, surviving enemies act in ID order. Goblins and ogres attack
+  when adjacent, otherwise they move one step along a route of at most five steps
+  toward you. Other enemies block routes; ties prefer up, right, down, then left.
+  Moving does not also attack for these species.
+- Cave bats take two consecutive actions regardless of distance. At the start of
+  each action they attack if adjacent; otherwise they choose uniformly among
+  free neighboring floors, or wait if trapped. They can move then attack, or
+  attack twice. They never move into you or another enemy.
 - Keys and potions are collected automatically. A potion immediately restores
   4 HP, capped at 10, and is consumed even at full health.
-- Reaching the door with the key spends a turn and starts descent before goblins
-  act. Death immediately stops the remaining goblin actions. The journal retains
+- Reaching the door with the key spends a turn and starts descent before enemies
+  act. Death immediately stops the remaining enemy actions. The journal retains
   the six latest messages, including floor arrivals.
 
 Damage briefly turns the affected character’s tile red for 200 ms without
-pausing input. Defeated goblins leave a short visual afterimage, but are removed
+pausing input. Defeated enemies leave a short visual afterimage, but are removed
 from combat immediately. Repeated hits refresh the effect; changing floors or
 starting a new expedition clears it.
+
+## Monsters and depth
+
+| Monster | HP | Damage | Actions per turn |
+| --- | ---: | --- | ---: |
+| 👺 Goblin | 4 | 1 | 1 |
+| 🦇 Cave Bat | 4 | 1 | 2 |
+| 👹 Ogre | 8 | Random integer 1–3, equally likely per attack | 1 |
+
+Names appear in tooltips and combat logs, including the damage dealt. Each enemy
+is drawn independently using these probabilities; intermediate floors linearly
+interpolate between the rows. Floor 10 and deeper use the final row. Actual
+counts vary with the draw rather than enforcing quotas.
+
+| Floor | Goblin | Cave Bat | Ogre |
+| --- | ---: | ---: | ---: |
+| 1 | 100% | 0% | 0% |
+| 3 | 70% | 30% | 0% |
+| 5 | 45% | 40% | 15% |
+| 10+ | 15% | 45% | 40% |
 
 ## Random dungeons and camera
 
@@ -105,8 +128,8 @@ six-room chain instead. The final map tightly encloses all floors with a one-til
 wall border. Width and height vary, up to 64 × 64 tiles. All floors are connected.
 The door to the next floor is a floor farthest from the starting room's center by shortest path.
 
-For `n` generated rooms, there are `n − 3` goblins, `ceil(n / 2)` potions, and one
-key. Placements do not overlap or occupy the start or door. Goblins start at least
+For `n` generated rooms, there are `n − 3` enemies, `ceil(n / 2)` potions, and one
+key. Placements do not overlap or occupy the start or door. Enemies start at least
 four path steps from you. Terrain reachability is guaranteed; identical difficulty
 and survival through every placement are not guaranteed.
 
@@ -122,7 +145,9 @@ systems and browsers. Walls and floors remain text symbols.
 ## Implementation
 
 - [Game.scala](src/main/scala/fuidungeon/Game.scala): immutable game state and pure
-  turn rules, independent of the DOM.
+  turn rules, independent of the DOM. Action randomness is seeded from game state
+  and advances only on valid turns, so identical states and actions reproduce
+  identical outcomes.
 - [Dungeon.scala](src/main/scala/fuidungeon/Dungeon.scala): bounded room generation,
   connections, cropping, and distance calculation. Initialization uses a local
   seeded random generator; the same seed reproduces the complete initial state.

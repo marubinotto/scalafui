@@ -22,11 +22,36 @@ object Game {
   enum Item { case Key, Potion }
   enum Target {
     case Player
-    case Goblin(id: Int)
+    case Monster(id: Int)
   }
-  case class Damage(target: Target, position: Pos, defeated: Boolean)
+  case class Damage(target: Target, position: Pos, defeated: Boolean, kind: Option[EnemyKind] = None)
   case class TurnResult(state: State, damage: Vector[Damage] = Vector.empty)
-  case class Enemy(id: Int, position: Pos, hp: Int = 4)
+  enum EnemyKind(val label: String, val icon: String, val initialHp: Int) {
+    case Goblin extends EnemyKind("Goblin", "👺", 4)
+    case CaveBat extends EnemyKind("Cave Bat", "🦇", 4)
+    case Ogre extends EnemyKind("Ogre", "👹", 8)
+  }
+  case class Enemy(id: Int, position: Pos, hp: Int = 4, kind: EnemyKind = EnemyKind.Goblin)
+  object Enemy {
+    def spawn(id: Int, position: Pos, kind: EnemyKind): Enemy = Enemy(id, position, kind.initialHp, kind)
+  }
+
+  def enemyWeights(floor: Int): Vector[Double] = {
+    val anchors = Vector((1, Vector(100.0, 0.0, 0.0)), (3, Vector(70.0, 30.0, 0.0)),
+      (5, Vector(45.0, 40.0, 15.0)), (10, Vector(15.0, 45.0, 40.0)))
+    val depth = floor.max(1).min(10)
+    val pair = anchors.sliding(2).find(p => depth <= p(1)._1).get
+    val fraction = (depth - pair(0)._1).toDouble / (pair(1)._1 - pair(0)._1)
+    pair(0)._2.zip(pair(1)._2).map((a, b) => a + (b - a) * fraction)
+  }
+
+  private def chooseEnemy(random: Random, floor: Int): EnemyKind = {
+    val weights = enemyWeights(floor)
+    val roll = random.nextDouble() * 100
+    if (roll < weights(0)) EnemyKind.Goblin
+    else if (roll < weights(0) + weights(1)) EnemyKind.CaveBat
+    else EnemyKind.Ogre
+  }
   case class Board(rows: Vector[String]) {
     val width: Int = rows.head.length
     val height: Int = rows.length
@@ -46,6 +71,7 @@ object Game {
       player: Pos,
       hp: Int = maxHp,
       floor: Int = 1,
+      randomSeed: Long = 0L,
       hasKey: Boolean = false,
       enemies: Vector[Enemy] = Vector.empty,
       items: Map[Pos, Item] = Map.empty,
@@ -75,7 +101,9 @@ object Game {
     search(Queue((from, Vector.empty)), Set(from))
   }
 
-  def initial(seed: Long): State = {
+  def initial(seed: Long): State = initialFloor(seed, 1)
+
+  private[fuidungeon] def initialFloor(seed: Long, floor: Int): State = {
     val random = new Random(seed)
     val generated = Dungeon.generate(random)
     val dungeon = generated.board
@@ -86,15 +114,15 @@ object Game {
     )).take(generated.roomCount - 3)
     val items = Vector(Item.Key) ++ Vector.fill((generated.roomCount + 1) / 2)(Item.Potion)
     val itemPositions = random.shuffle(available.filterNot(enemyPositions.contains)).take(items.size)
-    State(dungeon, dungeon.start,
-      enemies = enemyPositions.zipWithIndex.map((p, id) => Enemy(id, p)),
-      items = itemPositions.zip(items).toMap)
+    val enemies = enemyPositions.zipWithIndex.map((p, id) => Enemy.spawn(id, p, chooseEnemy(random, floor)))
+    State(dungeon, dungeon.start, floor = floor, randomSeed = random.nextLong(),
+      enemies = enemies, items = itemPositions.zip(items).toMap)
   }
 
   /** Only a pending descent can replace the floor; expedition progress survives. */
   def nextFloor(state: State, seed: Long): State =
     if (state.status != Status.Descending) state
-    else initial(seed).copy(
+    else initialFloor(seed, state.floor + 1).copy(
       floor = state.floor + 1,
       hp = state.hp,
       turns = state.turns,
@@ -114,11 +142,11 @@ object Game {
           if (!state.board.isFloor(target)) return TurnResult(state)
           state.enemies.find(_.position == target) match {
             case Some(enemy) =>
-              events += Damage(Target.Goblin(enemy.id), target, enemy.hp <= 2)
+              events += Damage(Target.Monster(enemy.id), target, enemy.hp <= 2, Some(enemy.kind))
               val remaining = state.enemies.map(e => if (e.id == enemy.id) e.copy(hp = e.hp - 2) else e)
                 .filter(_.hp > 0)
               state.copy(enemies = remaining).note(
-                if (enemy.hp <= 2) "You defeat a goblin." else "You hit a goblin for 2.")
+                if (enemy.hp <= 2) s"You defeat the ${enemy.kind.label}." else s"You hit the ${enemy.kind.label} for 2.")
             case None =>
               val moved = state.copy(player = target, items = state.items - target)
               state.items.get(target) match {
@@ -130,30 +158,43 @@ object Game {
           }
       }
       val advanced = afterPlayer.copy(turns = state.turns + 1)
-      if (advanced.hasKey && advanced.player == advanced.board.exit)
+      val random = new Random(state.randomSeed)
+      val result = if (advanced.hasKey && advanced.player == advanced.board.exit)
         TurnResult(advanced.copy(status = Status.Descending, hasKey = false).note("You unlock the door and descend."))
-      else enemyTurn(TurnResult(advanced, events.result()))
+      else enemyTurn(TurnResult(advanced, events.result()), random)
+      result.copy(state = result.state.copy(randomSeed = random.nextLong()))
     }
   }
 
-  private def enemyTurn(turn: TurnResult): TurnResult =
-    turn.state.enemies.sortBy(_.id).foldLeft(turn) { (result, enemy) =>
-      val current = result.state
-      if (current.status != Status.Playing) result
-      else if (math.abs(enemy.position.x - current.player.x) + math.abs(enemy.position.y - current.player.y) == 1) {
-        val hit = current.copy(hp = (current.hp - 1).max(0)).note("A goblin hits you for 1.")
-        result.copy(
-          state = if (hit.hp == 0) hit.copy(status = Status.Lost).note("You fell in the dungeon.") else hit,
-          damage = result.damage :+ Damage(Target.Player, current.player, hit.hp == 0)
-        )
-      } else {
-        val blocked = current.enemies.filterNot(_.id == enemy.id).map(_.position).toSet
-        path(current.board, enemy.position, current.player, blocked) match {
-          case Some(steps) if steps.nonEmpty && steps.size <= 5 =>
-            result.copy(state = current.copy(enemies = current.enemies.map(e =>
-              if (e.id == enemy.id) e.copy(position = steps.head) else e)))
-          case _ => result
-        }
+  private def enemyTurn(turn: TurnResult, random: Random): TurnResult =
+    turn.state.enemies.sortBy(_.id).foldLeft(turn) { (result, original) =>
+      val actions = if (original.kind == EnemyKind.CaveBat) 2 else 1
+      (0 until actions).foldLeft(result) { (current, _) =>
+        if (current.state.status != Status.Playing) current
+        else current.state.enemies.find(_.id == original.id)
+          .fold(current)(enemy => enemyAction(current, enemy, random))
       }
     }
+
+  private def enemyAction(result: TurnResult, enemy: Enemy, random: Random): TurnResult = {
+    val current = result.state
+    if (math.abs(enemy.position.x - current.player.x) + math.abs(enemy.position.y - current.player.y) == 1) {
+      val amount = if (enemy.kind == EnemyKind.Ogre) 1 + random.nextInt(3) else 1
+      val hit = current.copy(hp = (current.hp - amount).max(0)).note(s"${enemy.kind.label} hits you for $amount.")
+      result.copy(
+        state = if (hit.hp == 0) hit.copy(status = Status.Lost).note("You fell in the dungeon.") else hit,
+        damage = result.damage :+ Damage(Target.Player, current.player, hit.hp == 0)
+      )
+    } else {
+      val blocked = current.enemies.filterNot(_.id == enemy.id).map(_.position).toSet
+      val destination = if (enemy.kind == EnemyKind.CaveBat) {
+        val available = Direction.values.toVector.map(enemy.position + _)
+          .filter(p => current.board.isFloor(p) && p != current.player && !blocked(p))
+        if (available.isEmpty) None else Some(available(random.nextInt(available.size)))
+      } else path(current.board, enemy.position, current.player, blocked)
+        .filter(steps => steps.nonEmpty && steps.size <= 5).map(_.head)
+      destination.fold(result)(position => result.copy(state = current.copy(enemies = current.enemies.map(e =>
+        if (e.id == enemy.id) e.copy(position = position) else e))))
+    }
+  }
 }

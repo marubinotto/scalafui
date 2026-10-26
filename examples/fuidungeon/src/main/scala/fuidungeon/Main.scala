@@ -66,7 +66,7 @@ object Main {
   def flashAt(model: Model, game: State, position: Pos): Option[Flash] =
     if (game.player == position) model.flashes.get(Target.Player)
     else game.enemies.find(_.position == position) match {
-      case Some(enemy) => model.flashes.get(Target.Goblin(enemy.id))
+      case Some(enemy) => model.flashes.get(Target.Monster(enemy.id))
       case None => model.flashes.values.find(f => f.damage.target != Target.Player &&
         f.damage.defeated && f.damage.position == position)
     }
@@ -121,10 +121,12 @@ object Main {
                   x <- 0 until game.board.width
                   position = Pos(x, y)
                   flash = flashAt(model, game, position)
+                  enemy = game.enemies.find(_.position == position)
+                  ghostKind = flash.filter(_.damage.defeated).flatMap(_.damage.kind)
                   appearance =
                     if (position == game.player) ("🤠", "player", "You")
-                    else if (game.enemies.exists(_.position == position)) ("👺", "enemy", "Goblin")
-                    else if (flash.exists(_.damage.defeated)) ("👺", "enemy", "Defeated goblin")
+                    else if (enemy.nonEmpty) (enemy.get.kind.icon, "enemy", enemy.get.kind.label)
+                    else if (ghostKind.nonEmpty) (ghostKind.get.icon, "enemy", s"Defeated ${ghostKind.get.label}")
                     else game.items.get(position) match {
                       case Some(Item.Key) => ("🔑", "key", "Key")
                       case Some(Item.Potion) => ("🧪", "potion", "Healing potion")
@@ -138,7 +140,7 @@ object Main {
             ),
             p(className := "hint")("Click the map or Tab to focus · Arrow keys / WASD · Space to wait"),
             div(className := "legend")(
-              span("🤠 You"), span("👺 Goblin"), span("🔑 Key"), span("🧪 Potion"), span("🚪 Next floor")
+              span("🤠 You"), span("🔑 Key"), span("🧪 Potion"), span("🚪 Next floor")
             )
           ),
           aside(className := "sidebar")(
@@ -149,8 +151,8 @@ object Main {
                 div(className := "health-fill", style := scala.scalajs.js.Dynamic.literal(width = s"${game.hp * 10}%"))()
               ),
               div(className := "stat")(span("KEY"), strong(if (game.hasKey) "Collected" else "Not found")),
-              div(className := "stat")(span("GOBLINS"), strong(s"${game.enemies.size} remaining")),
-              p(className := "objective")("Find this floor’s key, then step onto 🚪 to descend. Your HP carries over. Walk into goblins to attack; potions restore 4 HP.")
+              div(className := "stat")(span("ENEMIES"), strong(s"${game.enemies.size} remaining")),
+              p(className := "objective")("Find this floor’s key, then step onto 🚪 to descend. Your HP carries over. Walk into enemies to attack; potions restore 4 HP.")
             ),
             section(className := "card controls-card")(
               h2("Make your move"),

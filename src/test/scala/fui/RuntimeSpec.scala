@@ -111,4 +111,36 @@ class RuntimeSpec extends AsyncFunSuite {
       } yield assert(first == "/pushed" && second == "/popped")
     }}.unsafeToFuture()
   }
+
+  test("subscriptions retain identity, cancel on removal, and restart when re-added") {
+    environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
+      for {
+        starts <- cats.effect.Ref.of[IO, Int](0)
+        started <- cats.effect.std.Queue.unbounded[IO, Int]
+        stopped <- cats.effect.std.Queue.unbounded[IO, Unit]
+        updated <- cats.effect.std.Queue.unbounded[IO, Unit]
+        sub = Sub.fromCallback[Boolean]("external") { _ =>
+          starts.updateAndGet(_ + 1).flatMap(started.offer).as(stopped.offer(()))
+        }
+        runtime <- Runtime.make(dom.document.getElementById("app"), Program[Boolean, Boolean](
+          _ => (true, Cmd.none),
+          (model, _) => div(model.toString),
+          (msg, _) => (msg, Cmd(updated.offer(()).as(None))),
+          active => if (active) sub else Sub.Empty
+        ), dispatcher)
+        first <- started.take.timeout(2.seconds)
+        _ <- IO(runtime.dispatch(true))
+        _ <- updated.take.timeout(2.seconds)
+        unchanged <- starts.get
+        _ <- IO(runtime.dispatch(false))
+        _ <- updated.take.timeout(2.seconds)
+        _ <- stopped.take.timeout(2.seconds)
+        _ <- IO(runtime.dispatch(true))
+        _ <- updated.take.timeout(2.seconds)
+        second <- started.take.timeout(2.seconds)
+        _ <- IO(runtime.dispatch(false))
+        _ <- stopped.take.timeout(2.seconds)
+      } yield assert(first == 1 && unchanged == 1 && second == 2)
+    }}.unsafeToFuture()
+  }
 }

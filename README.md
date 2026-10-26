@@ -215,3 +215,18 @@ Messages are queued: `dispatch` schedules an update rather than updating the mod
 ## Tests
 
 Run `yarn install` at the repository root, then `sbt test`. Runtime tests use jsdom; browser command tests stub storage and fetch. Tests run serially because they install temporary browser globals.
+
+## Subscriptions
+
+`Sub.Impl(id, stream)` now uses `fs2.Stream[IO, Msg]`. `Sub.timeout`, `Sub.every` and `Sub.fromEvent` retain their call signatures. Use `Sub.fromCallback` for external APIs: the registration IO returns an IO that unregisters the callback.
+
+```scala
+Sub.fromCallback[Msg]("external-events") { emit =>
+  IO {
+    val unregister = registerListener(emit)
+    IO(unregister())
+  }
+}
+```
+
+Runtime cancels a subscription's stream when its ID disappears, running its cleanup. IDs determine identity: changing a stream under an existing ID does not restart it. Remove the ID before adding it again to restart a completed or stopped subscription. Callback adapters must return their cleanup after registration; registration failures should release any partially acquired external resources themselves.

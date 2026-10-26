@@ -3,7 +3,7 @@ import org.scalajs.linker.interface.ModuleSplitStyle
 val scala3Version = "3.7.4"
 ThisBuild / scalaVersion := scala3Version
 
-val circeVersion = "0.14.7"
+val circeVersion = "0.14.17"
 val slinkyVersion = "0.7.5"
 
 lazy val commonSettings = Seq(

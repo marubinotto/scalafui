@@ -26,6 +26,8 @@ object Game {
   }
   case class Damage(target: Target, position: Pos, defeated: Boolean, kind: Option[EnemyKind] = None)
   case class TurnResult(state: State, damage: Vector[Damage] = Vector.empty)
+  enum ActionKind { case Attack, Move, Wait }
+  case class TurnFrame(state: State, damage: Vector[Damage], kind: ActionKind)
   enum EnemyKind(val label: String, val icon: String, val initialHp: Int) {
     case Goblin extends EnemyKind("Goblin", "👺", 4)
     case CaveBat extends EnemyKind("Cave Bat", "🦇", 4)
@@ -132,14 +134,20 @@ object Game {
   def step(state: State, action: Action): State = stepWithEvents(state, action).state
 
   def stepWithEvents(state: State, action: Action): TurnResult = {
-    if (state.status != Status.Playing) TurnResult(state)
+    val frames = turnSequence(state, action)
+    TurnResult(frames.lastOption.fold(state)(_.state), frames.flatMap(_.damage))
+  }
+
+  /** Snapshots after visible actions, in execution order. Idle enemies add no frame. */
+  def turnSequence(state: State, action: Action): Vector[TurnFrame] = {
+    if (state.status != Status.Playing) Vector.empty
     else {
       val events = Vector.newBuilder[Damage]
       val afterPlayer = action match {
         case Action.Wait => state.note("You wait.")
         case Action.Move(direction) =>
           val target = state.player + direction
-          if (!state.board.isFloor(target)) return TurnResult(state)
+          if (!state.board.isFloor(target)) return Vector.empty
           state.enemies.find(_.position == target) match {
             case Some(enemy) =>
               events += Damage(Target.Monster(enemy.id), target, enemy.hp <= 2, Some(enemy.kind))
@@ -159,22 +167,31 @@ object Game {
       }
       val advanced = afterPlayer.copy(turns = state.turns + 1)
       val random = new Random(state.randomSeed)
-      val result = if (advanced.hasKey && advanced.player == advanced.board.exit)
-        TurnResult(advanced.copy(status = Status.Descending, hasKey = false).note("You unlock the door and descend."))
-      else enemyTurn(TurnResult(advanced, events.result()), random)
-      result.copy(state = result.state.copy(randomSeed = random.nextLong()))
+      val playerDamage = events.result()
+      val kind = if (playerDamage.nonEmpty) ActionKind.Attack
+        else if (action == Action.Wait) ActionKind.Wait else ActionKind.Move
+      val playerState = if (advanced.hasKey && advanced.player == advanced.board.exit)
+        advanced.copy(status = Status.Descending, hasKey = false).note("You unlock the door and descend.")
+      else advanced
+      var frames = Vector(TurnFrame(playerState, playerDamage, kind))
+      playerState.enemies.sortBy(_.id).foreach { original =>
+        val actions = if (original.kind == EnemyKind.CaveBat) 2 else 1
+        (0 until actions).foreach { _ =>
+          val current = frames.last.state
+          if (current.status == Status.Playing) {
+            current.enemies.find(_.id == original.id).foreach { enemy =>
+              val result = enemyAction(TurnResult(current), enemy, random)
+              if (result.state != current)
+                frames :+= TurnFrame(result.state, result.damage,
+                  if (result.damage.nonEmpty) ActionKind.Attack else ActionKind.Move)
+            }
+          }
+        }
+      }
+      val last = frames.last
+      frames.updated(frames.size - 1, last.copy(state = last.state.copy(randomSeed = random.nextLong())))
     }
   }
-
-  private def enemyTurn(turn: TurnResult, random: Random): TurnResult =
-    turn.state.enemies.sortBy(_.id).foldLeft(turn) { (result, original) =>
-      val actions = if (original.kind == EnemyKind.CaveBat) 2 else 1
-      (0 until actions).foldLeft(result) { (current, _) =>
-        if (current.state.status != Status.Playing) current
-        else current.state.enemies.find(_.id == original.id)
-          .fold(current)(enemy => enemyAction(current, enemy, random))
-      }
-    }
 
   private def enemyAction(result: TurnResult, enemy: Enemy, random: Random): TurnResult = {
     val current = result.state

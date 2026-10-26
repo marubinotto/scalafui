@@ -89,8 +89,14 @@ new first floor.
   act. Death immediately stops the remaining enemy actions. The journal retains
   the six latest messages, including floor arrivals.
 
-Damage briefly turns the affected character’s tile red for 200 ms without
-pausing input. Defeated enemies leave a short visual afterimage, but are removed
+Actions appear in order: your action, then enemies in ID order (including each
+of a Cave Bat’s two actions). Attacks display for 200 ms; movement and your wait
+display for 60 ms. Idle enemies add no delay. HP, positions, and journal entries
+update at each action. Inputs are ignored and movement buttons disabled until
+the final action finishes; inputs are not queued. **New expedition** can cancel
+playback, except while generating the next floor.
+
+Damage briefly turns the affected character’s tile red for 200 ms. Defeated enemies leave a short visual afterimage, but are removed
 from combat immediately. Repeated hits refresh the effect; changing floors or
 starting a new expedition clears it.
 

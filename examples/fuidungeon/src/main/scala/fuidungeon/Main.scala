@@ -18,12 +18,16 @@ object Main {
   case class Model(
       game: Option[State] = None,
       flashes: Map[Target, Flash] = Map.empty,
-      effectSerial: Long = 0
+      effectSerial: Long = 0,
+      pending: Vector[TurnFrame] = Vector.empty,
+      playback: Option[(Long, Int)] = None,
+      playbackSerial: Long = 0
   )
   enum Msg {
     case Ready(seed: Long)
     case FloorReady(seed: Long)
     case Act(action: Action)
+    case Advance(serial: Long)
     case Restart
     case ClearFlash(target: Target, serial: Long)
   }
@@ -37,30 +41,48 @@ object Main {
   def update(msg: Msg, model: Model): (Model, Cmd[Msg]) = msg match {
     case Ready(seed) if model.game.isEmpty => (model.copy(game = Some(initial(seed)), flashes = Map.empty), Cmd.none)
     case FloorReady(seed) if model.game.exists(_.status == Status.Descending) =>
-      (model.copy(game = model.game.map(Game.nextFloor(_, seed)), flashes = Map.empty), Cmd.none)
-    case Act(action) =>
-      val turn = model.game.map(Game.stepWithEvents(_, action))
-      val next = turn.map(_.state)
-      val descending = model.game.exists(_.status == Status.Playing) &&
-        next.exists(_.status == Status.Descending)
-      val command: Cmd[Msg] =
-        if (descending) Cmd.One(IO { Some(FloorReady(scala.util.Random.nextLong())) })
-        else Cmd.none
-      val updated = turn.toVector.flatMap(_.damage).foldLeft(model.copy(game = next)) { (m, damage) =>
-        val serial = m.effectSerial + 1
-        m.copy(flashes = m.flashes.updated(damage.target, Flash(damage, serial)), effectSerial = serial)
+      (model.copy(game = model.game.map(Game.nextFloor(_, seed)), flashes = Map.empty, pending = Vector.empty, playback = None), Cmd.none)
+    case Act(action) if model.playback.isEmpty =>
+      val frames = model.game.toVector.flatMap(Game.turnSequence(_, action))
+      frames.headOption match {
+        case None => (model, Cmd.none)
+        case Some(frame) => showFrame(model, frame, frames.tail)
       }
-      (if (descending) updated.copy(flashes = Map.empty) else updated, command)
-    case Restart if model.game.exists(_.status != Status.Descending) => (model.copy(game = None, flashes = Map.empty), newGame)
+    case Advance(serial) if model.playback.exists(_._1 == serial) =>
+      model.pending.headOption match {
+        case Some(frame) => showFrame(model, frame, model.pending.tail)
+        case None => (model.copy(playback = None, flashes = Map.empty), Cmd.none)
+      }
+    case Restart if model.game.exists(_.status != Status.Descending) =>
+      (model.copy(game = None, flashes = Map.empty, pending = Vector.empty, playback = None), newGame)
     case ClearFlash(target, serial) if model.flashes.get(target).exists(_.serial == serial) =>
       (model.copy(flashes = model.flashes - target), Cmd.none)
     case _ => (model, Cmd.none)
   }
 
-  def subscriptions(model: Model): Sub[Msg] =
-    model.flashes.toVector.sortBy(_._2.serial).foldLeft[Sub[Msg]](Sub.Empty) { case (sub, (target, flash)) =>
+  def frameDelay(kind: ActionKind): Int = if (kind == ActionKind.Attack) 200 else 60
+
+  private def showFrame(model: Model, frame: TurnFrame, rest: Vector[TurnFrame]): (Model, Cmd[Msg]) = {
+    val serial = model.playbackSerial + 1
+    val shown = frame.damage.foldLeft(model.copy(game = Some(frame.state), flashes = Map.empty,
+      pending = rest, playback = Some((serial, frameDelay(frame.kind))), playbackSerial = serial)) { (m, damage) =>
+      val effect = m.effectSerial + 1
+      m.copy(flashes = m.flashes.updated(damage.target, Flash(damage, effect)), effectSerial = effect)
+    }
+    if (frame.state.status == Status.Descending)
+      (shown.copy(pending = Vector.empty, playback = None, flashes = Map.empty),
+        Cmd.One(IO { Some(FloorReady(scala.util.Random.nextLong())) }))
+    else (shown, Cmd.none)
+  }
+
+  def subscriptions(model: Model): Sub[Msg] = {
+    val playback = model.playback.fold[Sub[Msg]](Sub.Empty) { (serial, delay) =>
+      Sub.timeout(delay.millis, Advance(serial), s"turn-$serial")
+    }
+    model.flashes.toVector.sortBy(_._2.serial).foldLeft(playback) { case (sub, (target, flash)) =>
       sub.combine(Sub.timeout(200.millis, ClearFlash(target, flash.serial), s"hit-${flash.serial}"))
     }
+  }
 
   /** Living occupants take precedence over defeated-enemy afterimages. */
   def flashAt(model: Model, game: State, position: Pos): Option[Flash] =
@@ -89,7 +111,7 @@ object Main {
         p(className := "intro")("Find the key. Descend deeper. Stay alive.")
       ),
       model.game.fold[ReactElement](div(className := "loading", role := "status")("Preparing the dungeon…")) { game =>
-        val playing = game.status == Status.Playing
+        val playing = game.status == Status.Playing && model.playback.isEmpty
         val wide = Camera.offset(game.board, game.player, 15)
         val narrow = Camera.offset(game.board, game.player, 9)
         val mapStyle = scala.scalajs.js.Dynamic.literal(
@@ -170,7 +192,7 @@ object Main {
             ),
             div(className := s"result ${game.status.toString.toLowerCase}", role := "status")(
               game.status match {
-                case Status.Playing => "Your next move awaits."
+                case Status.Playing => if (model.playback.nonEmpty) "Resolving turn…" else "Your next move awaits."
                 case Status.Descending => f"Descending to floor ${game.floor + 1}%02d…"
                 case Status.Lost => s"Expedition over. Reached Floor ${game.floor} in ${game.turns} turns."
               }

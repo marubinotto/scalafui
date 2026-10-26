@@ -35,51 +35,50 @@ class DamageSpec extends AnyFunSuite {
     assert(turn.damage == Vector(Damage(Target.Player, Pos(2, 1), false)))
   }
 
-  test("multiple attacks share one flash; repeated damage replaces the timer and ignores stale cleanup") {
+  private def advance(m: Model): Model = update(Advance(m.playback.get._1), m)._1
+
+  test("attacks replay separately, ignore input, and reject stale timers") {
     val game = base.copy(enemies = Vector(Enemy(0, Pos(2, 1)), Enemy(1, Pos(1, 2))))
-    assert(stepWithEvents(game, Action.Wait).damage.size == 2)
-    val first = act(Model(Some(game)), Action.Wait)
-    assert(first.flashes.size == 1 && Sub.toMap(subscriptions(first)).size == 1)
+    val player = act(Model(Some(game)), right)
+    assert(player.game.get.hp == 10)
+    assert(player.flashes.keySet == Set(Target.Monster(0)))
+    assert(player.playback.get._2 == 200)
+    assert(act(player, Action.Wait) == player)
+    val first = advance(player)
+    assert(first.game.get.hp == 9 && first.flashes.keySet == Set(Target.Player))
     val old = first.flashes(Target.Player).serial
-    val second = act(first, Action.Wait)
-    val latest = second.flashes(Target.Player).serial
-    assert(latest > old)
-    assert(Sub.toMap(subscriptions(first)).keySet.intersect(Sub.toMap(subscriptions(second)).keySet).isEmpty)
+    val second = advance(first)
+    assert(second.game.get.hp == 8)
+    assert(second.flashes(Target.Player).serial > old)
     assert(update(ClearFlash(Target.Player, old), second)._1 == second)
-    val cleared = update(ClearFlash(Target.Player, latest), second)._1
-    assert(cleared.game == second.game && cleared.flashes.isEmpty)
-    assert(Sub.toMap(subscriptions(cleared)).isEmpty)
+    assert(update(Advance(first.playback.get._1), second)._1 == second)
+    assert(second.pending.isEmpty && second.playback.nonEmpty)
+    val done = advance(second)
+    assert(done.playback.isEmpty && done.flashes.isEmpty)
+    assert(Sub.toMap(subscriptions(done)).isEmpty)
   }
 
-  test("flashes follow living targets, defeated ghosts do not override occupants") {
+  test("defeated ghosts disappear before movement and never override occupants") {
     val game = base.copy(enemies = Vector(Enemy(0, Pos(2, 1), 2)))
     val killed = act(Model(Some(game)), right)
-    assert(killed.game.get.enemies.isEmpty)
+    assert(killed.game.get.enemies.isEmpty && killed.pending.isEmpty)
     assert(flashAt(killed, killed.game.get, Pos(2, 1)).exists(_.damage.defeated))
-    val moved = act(killed, right)
+    val moved = act(advance(killed), right)
     assert(moved.game.get.player == Pos(2, 1))
+    assert(moved.playback.get._2 == 60)
     assert(flashAt(moved, moved.game.get, Pos(2, 1)).isEmpty)
     val occupied = killed.game.get.copy(enemies = Vector(Enemy(1, Pos(2, 1))))
     assert(flashAt(killed, occupied, Pos(2, 1)).isEmpty)
-    val hit = act(Model(Some(base.copy(enemies = Vector(Enemy(0, Pos(2, 1)))))), Action.Wait)
-    val moving = act(hit, Action.Move(Direction.Down))
-    assert(flashAt(moving, moving.game.get, Pos(1, 2)).nonEmpty)
-    assert(flashAt(moving, moving.game.get, Pos(1, 1)).isEmpty)
   }
 
-  test("descent and restart clear effects without reusing serials") {
-    val hit = act(Model(Some(base.copy(enemies = Vector(Enemy(0, Pos(2, 1)))))), Action.Wait)
-    val atExit = hit.copy(game = Some(hit.game.get.copy(player = Pos(4, 1), hasKey = true)))
-    val descending = act(atExit, right)
-    assert(descending.flashes.isEmpty && descending.effectSerial == hit.effectSerial)
-    val arrived = update(FloorReady(42), descending)._1
-    assert(arrived.flashes.isEmpty && arrived.effectSerial == hit.effectSerial)
+  test("restart cancels playback and effects without reusing timer serials") {
+    val hit = act(Model(Some(base.copy(enemies = Vector(Enemy(0, Pos(2, 1)))))), right)
     val restarted = update(Restart, hit)._1
-    assert(restarted.game.isEmpty && restarted.flashes.isEmpty && restarted.effectSerial == hit.effectSerial)
+    assert(restarted.game.isEmpty && restarted.flashes.isEmpty && restarted.pending.isEmpty && restarted.playback.isEmpty)
     val ready = update(Ready(42), restarted)._1
-    assert(ready.effectSerial == hit.effectSerial)
-    val again = act(ready.copy(game = hit.game), Action.Wait)
-    assert(again.flashes(Target.Player).serial > hit.flashes(Target.Player).serial)
-    assert(update(ClearFlash(Target.Player, hit.flashes(Target.Player).serial), again)._1 == again)
+    val again = act(ready.copy(game = hit.game), right)
+    assert(again.effectSerial > hit.effectSerial && again.playbackSerial > hit.playbackSerial)
+    assert(update(Advance(hit.playback.get._1), again)._1 == again)
+    assert(update(ClearFlash(Target.Monster(0), hit.effectSerial), again)._1 == again)
   }
 }

@@ -3,7 +3,6 @@ package todo
 import scala.scalajs.LinkingInfo
 import scala.scalajs.js
 import scala.scalajs.js.timers._
-import scala.scalajs.js.annotation.JSImport
 import org.scalajs.dom
 import org.scalajs.dom.HTMLElement
 import org.scalajs.dom.URL
@@ -19,10 +18,6 @@ import cats.effect.std.Dispatcher
 import cats.effect.unsafe.implicits.global
 
 import fui._
-
-@JSImport("/index.css", JSImport.Default)
-@js.native
-object IndexCSS extends js.Object
 
 object Main {
 
@@ -147,8 +142,6 @@ object Main {
   //
   // VIEW
   //
-
-  val css = IndexCSS
 
   def view(model: Model, dispatch: Msg => Unit): ReactElement = {
     div(className := "todomvc-wrapper")(

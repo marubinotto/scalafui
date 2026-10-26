@@ -111,8 +111,8 @@ object Main {
 
 * Requirements
     * [sbt](https://www.scala-sbt.org/)
-    * [Node.js](https://nodejs.org/en/download/releases) v18 or later
-    * [Yarn](https://yarnpkg.com/)
+    * [Node.js](https://nodejs.org/en/download/releases) 20.19+ (20.x) or 22.12+
+    * [Yarn](https://yarnpkg.com/) Classic 1.22.x
 
 ### Hello World
 

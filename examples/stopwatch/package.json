@@ -14,7 +14,10 @@
     "react-proxy": "1.1.8"
   },
   "devDependencies": {
-    "vite": "^6.0.11",
+    "vite": "^7.3.5",
     "@scala-js/vite-plugin-scalajs": "^1.0.0"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   }
 }

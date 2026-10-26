@@ -1,0 +1,56 @@
+:root { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #e2e8d9; background: #111814; font-synthesis: none; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: radial-gradient(ellipse at 20% 0%, #283728 0, transparent 65%); min-height: 100vh; }
+button { font: inherit; cursor: pointer; }
+button:disabled { cursor: default; opacity: .4; }
+button:focus-visible, .board:focus { outline: 3px solid #e4bf6e; outline-offset: 4px; }
+.shell { max-width: 1020px; margin: auto; padding: 40px 28px 20px; }
+.eyebrow, .panel-heading, .stat > span { font-size: 11px; letter-spacing: .12em; color: #9aaa93; }
+h1 { font-size: clamp(36px, 7vw, 58px); letter-spacing: -.07em; margin: 12px 0; font-weight: 500; }
+h1 span { color: #dfbd76; }
+.intro { color: #a8b59f; font-size: 13px; margin-bottom: 30px; }
+.game-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; align-items: start; }
+.dungeon-panel { background: #172019; padding: 18px; border: 1px solid #3b4835; border-radius: 8px; }
+.panel-heading { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 18px; }
+.board { display: grid; grid-template-columns: repeat(15, 1fr); aspect-ratio: 1; width: 100%; background: #101712; border-radius: 3px; overflow: hidden; }
+.tile { display: flex; align-items: center; justify-content: center; font-size: clamp(12px, 2.1vw, 23px); min-width: 0; line-height: 1; }
+.wall { color: #566448; background: #2c3928; box-shadow: inset 0 0 0 1px #33422d; }
+.floor { color: #354331; }
+.player { background: #e4bf6e; color: #182017; border-radius: 4px; font-weight: bold; }
+.enemy { color: #f58e7b; background: #34221d; }
+.key, .exit { color: #f1cf7a; background: #35321c; }
+.potion { color: #a7d5ba; background: #1d3329; }
+.hint { color: #9aaa93; font-size: 11px; line-height: 1.7; margin: 14px 0; }
+.legend { display: flex; gap: 10px 16px; flex-wrap: wrap; font-size: 11px; color: #c3cdb9; border-top: 1px solid #34432f; padding-top: 16px; }
+.sidebar { display: grid; gap: 12px; }
+.card { background: #1a231c; border: 1px solid #34432f; border-radius: 7px; padding: 16px; }
+h2 { font-size: 13px; font-weight: 500; margin: 0 0 18px; color: #e4bf6e; }
+.stat { display: flex; justify-content: space-between; align-items: center; margin: 12px 0; gap: 8px; }
+.stat strong { font-size: 12px; font-weight: 500; }
+.health-track { height: 5px; background: #3c4434; margin-bottom: 18px; border-radius: 3px; overflow: hidden; }
+.health-fill { height: 100%; background: #b7cf8c; transition: width .15s; }
+.objective { font-size: 11px; line-height: 1.8; color: #a8b59f; margin: 18px 0 0; }
+.controls { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-areas: '. up .' 'left wait right' '. down .'; gap: 6px; max-width: 205px; margin: auto; }
+.control { min-height: 38px; border: 1px solid #536248; border-radius: 4px; color: #e2e8d9; background: #2c3928; }
+.control:hover:not(:disabled), .restart:hover { background: #415036; }
+.up { grid-area: up; } .left { grid-area: left; } .wait { grid-area: wait; font-size: 11px; } .right { grid-area: right; } .down { grid-area: down; }
+.controls-card .hint { text-align: center; margin-bottom: 0; }
+.journal ol { padding-left: 18px; margin: 0; font-size: 11px; line-height: 1.8; color: #b0bda5; }
+.journal h2 { margin-bottom: 10px; }
+.result { font-size: 12px; line-height: 1.6; padding: 4px 0; }
+.result.won { color: #e4bf6e; } .result.lost { color: #f58e7b; }
+.restart { width: 100%; border: 1px solid #71815c; background: transparent; color: #e4bf6e; border-radius: 5px; padding: 12px; font-size: 12px; }
+footer { margin-top: 28px; color: #8e9e84; font-size: 10px; }
+.loading { padding: 60px 0; }
+@media (max-width: 700px) {
+  .shell { padding: 22px 14px; }
+  .game-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .dungeon-panel { padding: 12px; }
+  .tile { font-size: clamp(12px, 3.8vw, 23px); }
+  .sidebar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card { padding: 12px; }
+  .journal, .result, .restart { grid-column: 1 / -1; }
+  .stat { flex-wrap: wrap; }
+  .control { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .health-fill { transition: none; } }

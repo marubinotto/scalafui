@@ -71,3 +71,9 @@ lazy val exampleStopwatch = project
   .enablePlugins(ScalaJSPlugin)
   .settings(commonSettings)
   .dependsOn(scalafui)
+
+lazy val exampleFuidungeon = project
+  .in(file("examples/fuidungeon"))
+  .enablePlugins(ScalaJSPlugin)
+  .settings(commonSettings)
+  .dependsOn(scalafui)

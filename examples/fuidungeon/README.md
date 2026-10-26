@@ -86,6 +86,11 @@ new first floor.
   act. Death immediately stops the remaining goblin actions. The journal retains
   the six latest messages, including floor arrivals.
 
+Damage briefly turns the affected character’s tile red for 200 ms without
+pausing input. Defeated goblins leave a short visual afterimage, but are removed
+from combat immediately. Repeated hits refresh the effect; changing floors or
+starting a new expedition clears it.
+
 ## Random dungeons and camera
 
 Each expedition randomly targets 6–10 rooms, each 4–7 tiles wide and high. New

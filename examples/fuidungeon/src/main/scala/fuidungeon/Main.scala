@@ -1,6 +1,7 @@
 package fuidungeon
 
 import scala.scalajs.LinkingInfo
+import scala.concurrent.duration.DurationInt
 import cats.effect.IO
 import cats.effect.std.Dispatcher
 import cats.effect.unsafe.implicits.global
@@ -13,12 +14,18 @@ import fui.*
 import Game.*
 
 object Main {
-  case class Model(game: Option[State] = None)
+  case class Flash(damage: Damage, serial: Long)
+  case class Model(
+      game: Option[State] = None,
+      flashes: Map[Target, Flash] = Map.empty,
+      effectSerial: Long = 0
+  )
   enum Msg {
     case Ready(seed: Long)
     case FloorReady(seed: Long)
     case Act(action: Action)
     case Restart
+    case ClearFlash(target: Target, serial: Long)
   }
 
   export Msg.*
@@ -28,20 +35,42 @@ object Main {
   })
   def init(@annotation.unused url: URL): (Model, Cmd[Msg]) = (Model(), newGame)
   def update(msg: Msg, model: Model): (Model, Cmd[Msg]) = msg match {
-    case Ready(seed) if model.game.isEmpty => (Model(Some(initial(seed))), Cmd.none)
+    case Ready(seed) if model.game.isEmpty => (model.copy(game = Some(initial(seed)), flashes = Map.empty), Cmd.none)
     case FloorReady(seed) if model.game.exists(_.status == Status.Descending) =>
-      (model.copy(game = model.game.map(Game.nextFloor(_, seed))), Cmd.none)
+      (model.copy(game = model.game.map(Game.nextFloor(_, seed)), flashes = Map.empty), Cmd.none)
     case Act(action) =>
-      val next = model.game.map(Game.step(_, action))
+      val turn = model.game.map(Game.stepWithEvents(_, action))
+      val next = turn.map(_.state)
       val descending = model.game.exists(_.status == Status.Playing) &&
         next.exists(_.status == Status.Descending)
       val command: Cmd[Msg] =
         if (descending) Cmd.One(IO { Some(FloorReady(scala.util.Random.nextLong())) })
         else Cmd.none
-      (model.copy(game = next), command)
-    case Restart if model.game.exists(_.status != Status.Descending) => (Model(), newGame)
+      val updated = turn.toVector.flatMap(_.damage).foldLeft(model.copy(game = next)) { (m, damage) =>
+        val serial = m.effectSerial + 1
+        m.copy(flashes = m.flashes.updated(damage.target, Flash(damage, serial)), effectSerial = serial)
+      }
+      (if (descending) updated.copy(flashes = Map.empty) else updated, command)
+    case Restart if model.game.exists(_.status != Status.Descending) => (model.copy(game = None, flashes = Map.empty), newGame)
+    case ClearFlash(target, serial) if model.flashes.get(target).exists(_.serial == serial) =>
+      (model.copy(flashes = model.flashes - target), Cmd.none)
     case _ => (model, Cmd.none)
   }
+
+  def subscriptions(model: Model): Sub[Msg] =
+    model.flashes.toVector.sortBy(_._2.serial).foldLeft[Sub[Msg]](Sub.Empty) { case (sub, (target, flash)) =>
+      sub.combine(Sub.timeout(200.millis, ClearFlash(target, flash.serial), s"hit-${flash.serial}"))
+    }
+
+  /** Living occupants take precedence over defeated-enemy afterimages. */
+  def flashAt(model: Model, game: State, position: Pos): Option[Flash] =
+    if (game.player == position) model.flashes.get(Target.Player)
+    else game.enemies.find(_.position == position) match {
+      case Some(enemy) => model.flashes.get(Target.Goblin(enemy.id))
+      case None => model.flashes.values.find(f => f.damage.target != Target.Player &&
+        f.damage.defeated && f.damage.position == position)
+    }
+
 
   def actionForKey(key: String): Option[Action] = key.toLowerCase match {
     case "arrowup" | "w" => Some(Action.Move(Direction.Up))
@@ -91,9 +120,11 @@ object Main {
                   y <- 0 until game.board.height
                   x <- 0 until game.board.width
                   position = Pos(x, y)
+                  flash = flashAt(model, game, position)
                   appearance =
                     if (position == game.player) ("🤠", "player", "You")
                     else if (game.enemies.exists(_.position == position)) ("👺", "enemy", "Goblin")
+                    else if (flash.exists(_.damage.defeated)) ("👺", "enemy", "Defeated goblin")
                     else game.items.get(position) match {
                       case Some(Item.Key) => ("🔑", "key", "Key")
                       case Some(Item.Potion) => ("🧪", "potion", "Healing potion")
@@ -101,7 +132,7 @@ object Main {
                       case None if !game.board.isFloor(position) => ("#", "wall", "Wall")
                       case _ => ("·", "floor", "Floor")
                     }
-                } yield div(key := s"$x-$y", className := s"tile ${appearance._2}",
+                } yield div(key := s"$x-$y", className := s"tile ${appearance._2}${if (flash.nonEmpty) " hit" else ""}",
                   title := s"${appearance._3} ($x, $y)")(appearance._1))
               )
             ),
@@ -152,7 +183,7 @@ object Main {
   def main(args: Array[String]): Unit = run.unsafeRunAndForget()
   def run: IO[Unit] = Dispatcher.parallel[IO].use { dispatcher =>
     IO { if (LinkingInfo.developmentMode) hot.initialize() } *>
-      Browser.runProgram(dom.document.getElementById("app"), Program(init, view, update), dispatcher) *>
+      Browser.runProgram(dom.document.getElementById("app"), Program(init, view, update, subscriptions), dispatcher) *>
       IO.never
   }
 }

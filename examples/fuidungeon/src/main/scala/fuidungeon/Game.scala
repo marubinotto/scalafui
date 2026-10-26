@@ -20,6 +20,12 @@ object Game {
   }
   enum Status { case Playing, Descending, Lost }
   enum Item { case Key, Potion }
+  enum Target {
+    case Player
+    case Goblin(id: Int)
+  }
+  case class Damage(target: Target, position: Pos, defeated: Boolean)
+  case class TurnResult(state: State, damage: Vector[Damage] = Vector.empty)
   case class Enemy(id: Int, position: Pos, hp: Int = 4)
   case class Board(rows: Vector[String]) {
     val width: Int = rows.head.length
@@ -95,16 +101,20 @@ object Game {
       log = state.log
     ).note(s"You enter floor ${state.floor + 1}. Find its key and keep descending.")
 
-  def step(state: State, action: Action): State = {
-    if (state.status != Status.Playing) state
+  def step(state: State, action: Action): State = stepWithEvents(state, action).state
+
+  def stepWithEvents(state: State, action: Action): TurnResult = {
+    if (state.status != Status.Playing) TurnResult(state)
     else {
+      val events = Vector.newBuilder[Damage]
       val afterPlayer = action match {
         case Action.Wait => state.note("You wait.")
         case Action.Move(direction) =>
           val target = state.player + direction
-          if (!state.board.isFloor(target)) return state
+          if (!state.board.isFloor(target)) return TurnResult(state)
           state.enemies.find(_.position == target) match {
             case Some(enemy) =>
+              events += Damage(Target.Goblin(enemy.id), target, enemy.hp <= 2)
               val remaining = state.enemies.map(e => if (e.id == enemy.id) e.copy(hp = e.hp - 2) else e)
                 .filter(_.hp > 0)
               state.copy(enemies = remaining).note(
@@ -121,24 +131,28 @@ object Game {
       }
       val advanced = afterPlayer.copy(turns = state.turns + 1)
       if (advanced.hasKey && advanced.player == advanced.board.exit)
-        advanced.copy(status = Status.Descending, hasKey = false).note("You unlock the door and descend.")
-      else enemyTurn(advanced)
+        TurnResult(advanced.copy(status = Status.Descending, hasKey = false).note("You unlock the door and descend."))
+      else enemyTurn(TurnResult(advanced, events.result()))
     }
   }
 
-  private def enemyTurn(state: State): State =
-    state.enemies.sortBy(_.id).foldLeft(state) { (current, enemy) =>
-      if (current.status != Status.Playing) current
+  private def enemyTurn(turn: TurnResult): TurnResult =
+    turn.state.enemies.sortBy(_.id).foldLeft(turn) { (result, enemy) =>
+      val current = result.state
+      if (current.status != Status.Playing) result
       else if (math.abs(enemy.position.x - current.player.x) + math.abs(enemy.position.y - current.player.y) == 1) {
         val hit = current.copy(hp = (current.hp - 1).max(0)).note("A goblin hits you for 1.")
-        if (hit.hp == 0) hit.copy(status = Status.Lost).note("You fell in the dungeon.") else hit
+        result.copy(
+          state = if (hit.hp == 0) hit.copy(status = Status.Lost).note("You fell in the dungeon.") else hit,
+          damage = result.damage :+ Damage(Target.Player, current.player, hit.hp == 0)
+        )
       } else {
         val blocked = current.enemies.filterNot(_.id == enemy.id).map(_.position).toSet
         path(current.board, enemy.position, current.player, blocked) match {
           case Some(steps) if steps.nonEmpty && steps.size <= 5 =>
-            current.copy(enemies = current.enemies.map(e =>
-              if (e.id == enemy.id) e.copy(position = steps.head) else e))
-          case _ => current
+            result.copy(state = current.copy(enemies = current.enemies.map(e =>
+              if (e.id == enemy.id) e.copy(position = steps.head) else e)))
+          case _ => result
         }
       }
     }

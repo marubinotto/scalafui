@@ -70,7 +70,7 @@ class Runtime[Model, Msg] private (
   }
 
   def onPushUrl(url: URL): Unit =
-    program.onUrlChange.map(_(url)).map(dispatch)
+    program.onUrlChange.foreach(f => dispatch(f(url)))
 
   private def processNextMessage: IO[Unit] =
     queue.take.flatMap { msg =>

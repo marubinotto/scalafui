@@ -84,7 +84,7 @@ object Main {
       )
   }
 
-  def init(url: URL): (Model, Cmd[Msg]) = (Model(), Cmd.none)
+  def init(@scala.annotation.unused url: URL): (Model, Cmd[Msg]) = (Model(), Cmd.none)
 
   //
   // UPDATE
@@ -200,7 +200,7 @@ object Main {
         `type` := "checkbox",
         name := "toggle",
         checked := allCompleted,
-        onClick := ((e) => dispatch(CheckAll(!allCompleted)))
+        onClick := ((_) => dispatch(CheckAll(!allCompleted)))
       ),
       label(htmlFor := "toggle-all")("Mark all as complete"),
       ul(className := "todo-list")(
@@ -221,14 +221,14 @@ object Main {
           className := "toggle",
           `type` := "checkbox",
           checked := entry.completed,
-          onClick := ((e) => dispatch(Check(entry.id, !entry.completed)))
+          onClick := ((_) => dispatch(Check(entry.id, !entry.completed)))
         ),
-        label(onDoubleClick := ((e) => dispatch(EditingEntry(entry.id, true))))(
+        label(onDoubleClick := ((_) => dispatch(EditingEntry(entry.id, true))))(
           entry.description
         ),
         button(
           className := "destroy",
-          onClick := ((e) => dispatch(Delete(entry.id)))
+          onClick := ((_) => dispatch(Delete(entry.id)))
         )
       ),
       input(
@@ -237,7 +237,7 @@ object Main {
         name := "title",
         id := "todo-" + entry.id,
         onInput := ((e) => dispatch(UpdateEntry(entry.id, e.target.value))),
-        onBlur := ((e) => dispatch(EditingEntry(entry.id, false))),
+        onBlur := ((_) => dispatch(EditingEntry(entry.id, false))),
         onKeyDown := ((e) => {
           if (e.keyCode == 13) dispatch(EditingEntry(entry.id, false)) else ()
         })
@@ -286,7 +286,7 @@ object Main {
       actualVisibility: String,
       dispatch: Msg => Unit
   ): ReactElement = {
-    li(onClick := ((e) => dispatch(ChangeVisibility(visibility))))(
+    li(onClick := ((_) => dispatch(ChangeVisibility(visibility))))(
       a(
         href := uri,
         className := optionalClasses(
@@ -303,7 +303,7 @@ object Main {
     button(
       className := "clear-completed",
       hidden := (entriesCompleted == 0),
-      onClick := ((e) => dispatch(DeleteComplete))
+      onClick := ((_) => dispatch(DeleteComplete))
     )("Clear completed (" + entriesCompleted + ")")
   }
 

@@ -1,18 +1,19 @@
 import org.scalajs.linker.interface.ModuleSplitStyle
 
-ThisBuild / scalaVersion := "2.13.16"
+val scala3Version = "3.7.4"
+ThisBuild / scalaVersion := scala3Version
 
 val circeVersion = "0.14.7"
-val slinkyVersion = "0.7.4"
+val slinkyVersion = "0.7.5"
 
 lazy val commonSettings = Seq(
+  scalaModuleInfo := scalaModuleInfo.value.map(_.withOverrideScalaVersion(true)),
   scalacOptions ++= Seq(
     "-encoding",
     "utf-8",
     "-deprecation",
     "-feature",
-    "-Ymacro-annotations",
-    "-Xlint:unused"
+    "-Wunused:all"
   ),
 
   // We have a `main` method
@@ -27,6 +28,11 @@ lazy val commonSettings = Seq(
         ModuleSplitStyle.SmallModulesFor(List("scalafui"))
       )
   },
+  dependencyOverrides ++= Seq(
+    "org.scala-lang" % "scala3-library_3" % scala3Version,
+    "org.scala-lang" % "scala3-interfaces" % scala3Version,
+    "org.scala-lang" % "tasty-core_3" % scala3Version
+  ),
   libraryDependencies ++= Seq(
     "org.scala-js" %%% "scalajs-dom" % "2.8.0",
     "org.scala-js" %%% "scala-js-macrotask-executor" % "1.1.1",
@@ -35,7 +41,7 @@ lazy val commonSettings = Seq(
     "io.circe" %%% "circe-core" % circeVersion,
     "io.circe" %%% "circe-generic" % circeVersion,
     "io.circe" %%% "circe-parser" % circeVersion,
-    "org.typelevel" %%% "cats-effect" % "3.5.4",
+    "org.typelevel" %%% "cats-effect" % "3.7.0",
     "com.softwaremill.quicklens" %%% "quicklens" % "1.9.7",
     "org.scalatest" %%% "scalatest" % "3.2.19" % Test
   )
@@ -55,12 +61,7 @@ lazy val exampleTodo = project
 lazy val exampleMultipage = project
   .in(file("examples/multipage"))
   .enablePlugins(ScalaJSPlugin)
-  .settings(
-    commonSettings,
-    libraryDependencies ++= Seq(
-      "tech.sparse" %%% "trail" % "0.3.1"
-    )
-  )
+  .settings(commonSettings)
   .dependsOn(scalafui)
 
 lazy val exampleStopwatch = project

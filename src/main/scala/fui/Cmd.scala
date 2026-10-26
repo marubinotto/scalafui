@@ -63,7 +63,7 @@ object Cmd {
   }
 
   object Batch {
-    def fromSeq[Msg](cmds: Seq[One[Msg]]): Batch[Msg] = Batch(cmds: _*)
+    def fromSeq[Msg](cmds: Seq[One[Msg]]): Batch[Msg] = Batch(cmds*)
   }
 
   def none[Msg]: One[Msg] = One(IO.none)

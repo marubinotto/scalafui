@@ -10,7 +10,6 @@ import org.scalajs.dom.{Element, URL}
 import cats.effect.IO
 
 import io.circe._
-import io.circe.Decoder
 import io.circe.parser._
 
 object Browser {
@@ -27,7 +26,7 @@ object Browser {
       program: Program[Model, Msg]
   ) = {
     val runtime = new Runtime(container, program)
-    listenersOnPushUrl = runtime.onPushUrl _ :: listenersOnPushUrl
+    listenersOnPushUrl = runtime.onPushUrl :: listenersOnPushUrl
   }
 
   def send[Msg](msg: Msg): Cmd.One[Msg] = Cmd(IO(Some(msg)))
@@ -105,7 +104,7 @@ object Browser {
   ): Cmd.One[Either[Throwable, Result]] =
     Cmd(IO.async { cb =>
       IO {
-        implicit val resultDecoder = decoder
+        implicit val resultDecoder: Decoder[Result] = decoder
         dom.fetch(url).flatMap(_.text()).onComplete {
           // Returning a Right even when the process has failed so that
           // the error can be handled as a Msg.

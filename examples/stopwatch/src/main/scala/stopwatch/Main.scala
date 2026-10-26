@@ -32,7 +32,7 @@ object Main {
     def toggle: Model = copy(active = !active)
   }
 
-  def init(url: URL): (Model, Cmd[Msg]) = (Model(), Cmd.none)
+  def init(@scala.annotation.unused url: URL): (Model, Cmd[Msg]) = (Model(), Cmd.none)
 
   //
   // UPDATE
@@ -100,13 +100,13 @@ object Main {
         span(className := "seconds")(f"$seconds%1.2f")
       ),
       div(className := "buttons")(
-        button(onClick := ((e) => dispatch(ToggleActivation)))(
+        button(onClick := ((_) => dispatch(ToggleActivation)))(
           if (model.active)
             "Stop"
           else
             "Start"
         ),
-        button(onClick := ((e) => dispatch(Reset)))("Reset")
+        button(onClick := ((_) => dispatch(Reset)))("Reset")
       )
     )
   }

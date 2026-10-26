@@ -1,7 +1,6 @@
 package multipage
 
 import io.circe._
-import io.circe.Decoder
 
 import scala.scalajs.js.URIUtils
 
@@ -21,13 +20,13 @@ object Server {
 
   val workDecoder: Decoder[Work] =
     Decoder.forProduct4("key", "title", "author_name", "description")(
-      (key: String, title, author_name, description) =>
+      (key: String, title: String, author_name: Option[List[String]], description: Option[String]) =>
         Work(key.stripPrefix("/works/"), title, author_name, description)
     )
 
   val worksDecoder = new Decoder[Seq[Work]] {
     implicit val workSeqDecoder: Decoder[Seq[Work]] =
-      Decoder.decodeSeq(workDecoder)
+      Decoder.decodeSeq(using workDecoder)
     final def apply(c: HCursor): Decoder.Result[Seq[Work]] =
       for {
         works <- c.downField("docs").as[Seq[Work]]
@@ -55,7 +54,7 @@ object Server {
 
   val editionDecoder: Decoder[Edition] =
     Decoder.forProduct5("key", "title", "publish_date", "publishers", "covers")(
-      (key: String, title, publish_date, publishers, covers) =>
+      (key: String, title: String, publish_date: Option[String], publishers: Option[List[String]], covers: Option[List[Int]]) =>
         Edition(
           key.stripPrefix("/books/"),
           title,
@@ -67,7 +66,7 @@ object Server {
 
   val editionsDecoder = new Decoder[Seq[Edition]] {
     implicit val editionSeqDecoder: Decoder[Seq[Edition]] =
-      Decoder.decodeSeq(editionDecoder)
+      Decoder.decodeSeq(using editionDecoder)
     final def apply(c: HCursor): Decoder.Result[Seq[Edition]] =
       for {
         editions <- c.downField("entries").as[Seq[Edition]]

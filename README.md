@@ -173,3 +173,20 @@ sbt> ~exampleStopwatch/fastLinkJS
 ## Command composition
 
 Use `Cmd.Batch` for independent commands, `Cmd.One.flatMap` to chain commands that emit a message, or `Cmd.One.sequenceOf` to execute commands in order and collect their messages. `Cmd.Sequence` and `One.toBatch` have been removed.
+
+## Routing
+
+Scalafui uses Scala 3 and includes `fui.router`, adapted from Cotoami's router with query parameter support. The Multipage example no longer depends on Trail.
+
+```scala
+import fui.router._
+
+val search = Root & Param[String]("query")
+val work = Root / "work" / Arg[String]()
+val paged = work & Param[String]("query") & Param[Int]("page")
+
+search.url("Scala + UI") // /?query=Scala+%2B+UI
+paged.url(("123", "Scala", 2)) // /work/123?query=Scala&page=2
+```
+
+Patterns match relative URLs containing a path, query and optional fragment. Required query parameters must be present and decode successfully; empty strings are valid. The first repeated value wins, unknown parameters and fragments are ignored, and path-only routes also match URLs with queries. Order more specific query patterns before path-only fallbacks. Both path arguments and query values use `Codec`; query encoding follows `URLSearchParams`.

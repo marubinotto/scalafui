@@ -18,7 +18,7 @@ object Main {
 
   case class Model(messages: Seq[String] = Seq.empty, input: String = "")
 
-  def init(url: URL): (Model, Cmd[Msg]) = (Model(), Cmd.none)
+  def init(@scala.annotation.unused url: URL): (Model, Cmd[Msg]) = (Model(), Cmd.none)
 
   //
   // UPDATE

@@ -12,7 +12,7 @@ import slinky.core.facade.ReactElement
 import slinky.hot
 import slinky.web.html._
 
-import trail._
+import fui.router._
 
 import fui._
 
@@ -66,16 +66,16 @@ object Main {
       case (SearchPageMsg(pageMsg), SearchPage(pageModel)) =>
         applyPageUpdate(
           page.Search.update(pageMsg, pageModel),
-          SearchPage,
-          SearchPageMsg,
+          SearchPage.apply,
+          SearchPageMsg.apply,
           model
         )
 
       case (WorkPageMsg(pageMsg), WorkPage(pageModel)) =>
         applyPageUpdate(
           page.Work.update(pageMsg, pageModel),
-          WorkPage,
-          WorkPageMsg,
+          WorkPage.apply,
+          WorkPageMsg.apply,
           model
         )
 
@@ -85,13 +85,13 @@ object Main {
   def applyUrlChange(url: URL, model: Model): (Model, Cmd[Msg]) =
     url.pathname + url.search + url.hash match {
       case Route.searchWithQuery(q) =>
-        applyPageUpdate(page.Search.init(q), SearchPage, SearchPageMsg, model)
+        applyPageUpdate(page.Search.init(q), SearchPage.apply, SearchPageMsg.apply, model)
 
       case Route.search(_) =>
-        applyPageUpdate(page.Search.init(), SearchPage, SearchPageMsg, model)
+        applyPageUpdate(page.Search.init(), SearchPage.apply, SearchPageMsg.apply, model)
 
       case Route.work(id) =>
-        applyPageUpdate(page.Work.init(id), WorkPage, WorkPageMsg, model)
+        applyPageUpdate(page.Work.init(id), WorkPage.apply, WorkPageMsg.apply, model)
 
       case _ =>
         (model.copy(currentPage = NotFoundPage), Cmd.none)
@@ -146,7 +146,7 @@ object Main {
         init,
         view,
         update,
-        (model: Model) => Sub.Empty,
+        (_: Model) => Sub.Empty,
         Some(UrlChanged(_))
       )
     )

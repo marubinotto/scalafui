@@ -41,11 +41,14 @@ object Main {
   // UPDATE
   //
 
-  sealed trait Msg
-  case object ToggleActivation extends Msg
-  case class StartTime(time: Long) extends Msg
-  case class Tick(currentTime: Long) extends Msg
-  case object Reset extends Msg
+  enum Msg {
+    case ToggleActivation
+    case StartTime(time: Long)
+    case Tick(currentTime: Long)
+    case Reset
+  }
+
+  export Msg.*
 
   def update(msg: Msg, model: Model): (Model, Cmd[Msg]) =
     msg match {

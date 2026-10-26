@@ -28,9 +28,12 @@ object Main {
   // UPDATE
   //
 
-  sealed trait Msg
-  case class Input(input: String) extends Msg
-  case object Send extends Msg
+  enum Msg {
+    case Input(input: String)
+    case Send
+  }
+
+  export Msg.*
 
   def update(msg: Msg, model: Model): (Model, Cmd[Msg]) =
     msg match {

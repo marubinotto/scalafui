@@ -39,10 +39,12 @@ object Work {
   // UPDATE
   //
 
-  sealed trait Msg
-  case class WorkFetched(result: Either[Throwable, domain.Work]) extends Msg
-  case class EditionsFetched(result: Either[Throwable, Seq[domain.Edition]])
-      extends Msg
+  enum Msg {
+    case WorkFetched(result: Either[Throwable, domain.Work])
+    case EditionsFetched(result: Either[Throwable, Seq[domain.Edition]])
+  }
+
+  export Msg.*
 
   def update(msg: Msg, model: Model): (Model, Cmd[Msg]) =
     msg match {

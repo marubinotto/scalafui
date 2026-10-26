@@ -34,13 +34,16 @@ object Search {
   // UPDATE
   //
 
-  sealed trait Msg
-  case class QueryInput(query: String) extends Msg
-  case class SearchResult(
-      query: String,
-      result: Either[Throwable, Seq[domain.Work]]
-  ) extends Msg
-  case class FoundItemClicked(workId: String) extends Msg
+  enum Msg {
+    case QueryInput(query: String)
+    case SearchResult(
+        query: String,
+        result: Either[Throwable, Seq[domain.Work]]
+    )
+    case FoundItemClicked(workId: String)
+  }
+
+  export Msg.*
 
   val DebounceKey = "search"
 

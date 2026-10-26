@@ -88,16 +88,19 @@ object Main {
   // UPDATE
   //
 
-  sealed trait Msg
-  case object Add extends Msg
-  case class UpdateInput(input: String) extends Msg
-  case class EditingEntry(id: Int, isEditing: Boolean) extends Msg
-  case class UpdateEntry(id: Int, description: String) extends Msg
-  case class Delete(id: Int) extends Msg
-  case object DeleteComplete extends Msg
-  case class Check(id: Int, isCompleted: Boolean) extends Msg
-  case class CheckAll(isCompleted: Boolean) extends Msg
-  case class ChangeVisibility(visibility: String) extends Msg
+  enum Msg {
+    case Add
+    case UpdateInput(input: String)
+    case EditingEntry(id: Int, isEditing: Boolean)
+    case UpdateEntry(id: Int, description: String)
+    case Delete(id: Int)
+    case DeleteComplete
+    case Check(id: Int, isCompleted: Boolean)
+    case CheckAll(isCompleted: Boolean)
+    case ChangeVisibility(visibility: String)
+  }
+
+  export Msg.*
 
   def update(msg: Msg, model: Model): (Model, Cmd[Msg]) = {
     msg match {

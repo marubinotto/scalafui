@@ -39,10 +39,13 @@ object Main {
       this.copy(currentPage = page)
   }
 
-  sealed trait Page
-  case object NotFoundPage extends Page
-  case class SearchPage(pageModel: page.Search.Model) extends Page
-  case class WorkPage(pageModel: page.Work.Model) extends Page
+  enum Page {
+    case NotFoundPage
+    case SearchPage(pageModel: page.Search.Model)
+    case WorkPage(pageModel: page.Work.Model)
+  }
+
+  export Page.*
 
   def init(url: URL): (Model, Cmd[Msg]) =
     applyUrlChange(url, Model(NotFoundPage))
@@ -51,10 +54,13 @@ object Main {
   // UPDATE
   //
 
-  sealed trait Msg
-  case class UrlChanged(url: URL) extends Msg
-  case class SearchPageMsg(pageMsg: page.Search.Msg) extends Msg
-  case class WorkPageMsg(pageMsg: page.Work.Msg) extends Msg
+  enum Msg {
+    case UrlChanged(url: URL)
+    case SearchPageMsg(pageMsg: page.Search.Msg)
+    case WorkPageMsg(pageMsg: page.Work.Msg)
+  }
+
+  export Msg.*
 
   def update(msg: Msg, model: Model): (Model, Cmd[Msg]) =
     (msg, model.currentPage) match {

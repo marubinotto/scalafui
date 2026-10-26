@@ -14,11 +14,14 @@ import Game.*
 
 object Main {
   case class Model(game: Option[State] = None)
-  sealed trait Msg
-  case class Ready(seed: Long) extends Msg
-  case class FloorReady(seed: Long) extends Msg
-  case class Act(action: Action) extends Msg
-  case object Restart extends Msg
+  enum Msg {
+    case Ready(seed: Long)
+    case FloorReady(seed: Long)
+    case Act(action: Action)
+    case Restart
+  }
+
+  export Msg.*
 
   private def newGame: Cmd[Msg] = Cmd.One(IO {
     Some(Ready(scala.util.Random.nextLong()))

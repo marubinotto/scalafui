@@ -111,7 +111,7 @@ object Main {
 
 * Requirements
     * [sbt](https://www.scala-sbt.org/)
-    * [Node.js](https://nodejs.org/en/download/releases) 20.19+ (20.x) or 22.12+
+    * [Node.js](https://nodejs.org/en/download/releases) 22.22.2+ (22.x), 24.15.0+ (24.x), or 26+ for the repository root and tests
     * [Yarn](https://yarnpkg.com/) Classic 1.22.x
 
 ### Hello World
@@ -214,7 +214,7 @@ Messages are queued: `dispatch` schedules an update rather than updating the mod
 
 ## Tests
 
-Run `yarn install` at the repository root, then `sbt test`. Runtime tests use jsdom; browser command tests stub storage and fetch. Tests run serially because they install temporary browser globals.
+Run `yarn install` at the repository root, then `sbt test`. Runtime tests use jsdom 30 and require the Node.js versions listed above; browser command tests stub storage and fetch. Tests run serially because they install temporary browser globals.
 
 ## Subscriptions
 

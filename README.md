@@ -169,3 +169,7 @@ sbt> ~exampleStopwatch/fastLinkJS
 `Browser.ajaxHead(url)` returns an `Either[Throwable, dom.Response]`; inspect the response status in your update function.
 `Browser.setLocalStorage(key, value)` and `removeLocalStorage(key)` perform storage operations without emitting a message.
 `Browser.getLocalStorage(key)` emits `Option[String]`, including `None` for a missing key.
+
+## Command composition
+
+Use `Cmd.Batch` for independent commands, `Cmd.One.flatMap` to chain commands that emit a message, or `Cmd.One.sequenceOf` to execute commands in order and collect their messages. `Cmd.Sequence` and `One.toBatch` have been removed.

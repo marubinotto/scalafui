@@ -7,7 +7,6 @@ import org.scalajs.dom.URL
 import org.scalajs.dom.Event
 
 import cats.effect.unsafe.implicits.global
-import cats.syntax.parallel._
 
 import slinky.web.ReactDOM
 
@@ -40,27 +39,12 @@ class Runtime[Model, Msg](
       }
       case cmd: Cmd.One[Msg]          => runOne(cmd)
       case Cmd.Batch(cmds @ _*)       => for (cmd <- cmds) run(cmd)
-      case Cmd.Sequence(batches @ _*) => runSequence(batches.toList)
     }
 
   private def runOne(cmd: Cmd.One[Msg]): Unit =
     cmd.io.unsafeRunAsync {
       case Right(optionMsg) => optionMsg.map(dispatch)
       case Left(e) => throw e // IO should return Right even when it fails
-    }
-
-  private def runSequence(batches: List[Cmd.Batch[Msg]]): Unit =
-    batches match {
-      case Nil => ()
-      case head :: tail => {
-        head.cmds.map(_.io).parSequence.unsafeRunAsync {
-          case Right(optionMsgs) => {
-            optionMsgs.foreach(_.map(dispatch))
-            runSequence(tail)
-          }
-          case Left(e) => throw e // IO should return Right even when it fails
-        }
-      }
     }
 
   private def updateSubs(model: Model): Unit = {

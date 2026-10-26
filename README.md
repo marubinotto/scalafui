@@ -177,32 +177,12 @@ sbt> ~exampleStopwatch/fastLinkJS
 
 ### fuidungeon
 
-A small turn-based dungeon RPG demonstrating pure game rules, immutable state,
-and random initialization through `Cmd`.
+A small turn-based dungeon RPG with randomly generated rooms and corridors and
+an automatically following camera. Demonstrates pure game rules, immutable
+state, and random initialization through `Cmd`.
 
-* [Game rules](examples/fuidungeon/src/main/scala/fuidungeon/Game.scala)
-* [Scalafui application](examples/fuidungeon/src/main/scala/fuidungeon/Main.scala)
-
-```console
-$ cd examples/fuidungeon
-$ yarn
-$ yarn run dev
-```
-
-In another terminal at the repository root:
-
-```console
-sbt> ~exampleFuidungeon/fastLinkJS
-```
-
-Click or Tab to focus the map, then use arrow keys / WASD to move and Space to
-wait. On-screen buttons also work. Bump into goblins to attack, collect the key
-(`k`), and reach the exit (`>`). Potions (`+`) restore 4 HP. Each move, attack, or
-wait gives enemies a turn; walking into a wall does not. New expedition resets
-the game and randomizes enemy and item placements. There is no save state.
-
-Run `sbt exampleFuidungeon/test` for game tests. For a production build, run
-`yarn build` inside `examples/fuidungeon` (the Vite plugin links Scala.js).
+See the [fuidungeon README](examples/fuidungeon/README.md) for setup, controls,
+game rules, and development instructions.
 
 ## Browser commands
 

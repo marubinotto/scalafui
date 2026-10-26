@@ -21,6 +21,7 @@ class MainSpec extends AnyFunSuite {
     val restarted = update(Ready(2), loading)._1.game.get
     assert(restarted == initial(2))
     assert(restarted.items != old.items)
+    assert(restarted.board != old.board)
   }
 
   test("keyboard mappings match direction and wait actions") {

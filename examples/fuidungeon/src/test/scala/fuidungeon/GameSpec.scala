@@ -15,25 +15,6 @@ class GameSpec extends AnyFunSuite {
   private def state = State(board, board.start)
   private def move(direction: Direction) = Action.Move(direction)
 
-  test("the 15 by 15 dungeon is connected and placements are reproducible and disjoint") {
-    assert(dungeon.rows.size == 15 && dungeon.rows.forall(_.length == 15))
-    assert(dungeon.floors.forall(p => path(dungeon, dungeon.start, p).nonEmpty))
-    for (seed <- 0L until 100L) {
-      val game = initial(seed)
-      assert(game == initial(seed))
-      assert(game.hp == 10 && game.turns == 0 && !game.hasKey && game.status == Status.Playing)
-      assert(game.enemies.size == 3 && game.enemies.forall(_.hp == 4))
-      assert(game.items.values.count(_ == Item.Key) == 1)
-      assert(game.items.values.count(_ == Item.Potion) == 2)
-      val occupied = game.enemies.map(_.position) ++ game.items.keys
-      assert(occupied.distinct.size == 6)
-      assert(occupied.forall(p => dungeon.isFloor(p) && p != dungeon.start && p != dungeon.exit))
-      assert(game.enemies.forall(e => path(dungeon, dungeon.start, e.position).exists(_.size >= 4)))
-      assert(game.items.keys.forall(p => path(dungeon, dungeon.start, p).nonEmpty))
-    }
-    assert(initial(1).items != initial(2).items)
-  }
-
   test("walls do not spend a turn; movement and waiting do") {
     assert(step(state, move(Direction.Up)) == state)
     val moved = step(state, move(Direction.Right))

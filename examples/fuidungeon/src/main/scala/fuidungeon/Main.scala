@@ -44,10 +44,18 @@ object Main {
       header(className := "masthead")(
         p(className := "eyebrow")("SCALAFUI / PLAYABLE EXAMPLE"),
         h1("fui", span("dungeon")),
-        p(className := "intro")("One key. Three goblins. A way out.")
+        p(className := "intro")("New rooms. One key. A way out.")
       ),
       model.game.fold[ReactElement](div(className := "loading", role := "status")("Preparing the dungeon…")) { game =>
         val playing = game.status == Status.Playing
+        val wide = Camera.offset(game.board, game.player, 15)
+        val narrow = Camera.offset(game.board, game.player, 9)
+        val mapStyle = scala.scalajs.js.Dynamic.literal(
+          "--map-width" -> s"${game.board.width * Camera.tileSize}px",
+          "--map-height" -> s"${game.board.height * Camera.tileSize}px",
+          "--wide-x" -> s"${wide.x}px", "--wide-y" -> s"${wide.y}px",
+          "--narrow-x" -> s"${narrow.x}px", "--narrow-y" -> s"${narrow.y}px"
+        )
         def control(label: String, action: Action, css: String): ReactElement =
           button(className := s"control $css", disabled := !playing,
             onClick := (_ => dispatch(Act(action))))(label)
@@ -56,7 +64,7 @@ object Main {
             div(className := "panel-heading")(
               span("01 / THE DUNGEON"), span(s"TURN ${game.turns}")
             ),
-            div(className := "board", tabIndex := 0, role := "group",
+            div(className := "board", style := mapStyle, tabIndex := 0, role := "group",
               aria-"label" := "Dungeon. Use arrow keys or WASD to move, Space to wait.",
               onKeyDown := (event => {
                 actionForKey(event.key).foreach { action =>
@@ -64,22 +72,24 @@ object Main {
                   if (!event.repeat) dispatch(Act(action))
                 }
               }))(
-              (for {
-                y <- 0 until game.board.height
-                x <- 0 until game.board.width
-                position = Pos(x, y)
-                appearance =
-                  if (position == game.player) ("@", "player", "You")
-                  else if (game.enemies.exists(_.position == position)) ("g", "enemy", "Goblin")
-                  else game.items.get(position) match {
-                    case Some(Item.Key) => ("k", "key", "Key")
-                    case Some(Item.Potion) => ("+", "potion", "Healing potion")
-                    case None if position == game.board.exit => (">", "exit", "Exit")
-                    case None if !game.board.isFloor(position) => ("#", "wall", "Wall")
-                    case _ => ("·", "floor", "Floor")
-                  }
-              } yield div(key := s"$x-$y", className := s"tile ${appearance._2}",
-                title := s"${appearance._3} ($x, $y)")(appearance._1))
+              div(className := "map")(
+                (for {
+                  y <- 0 until game.board.height
+                  x <- 0 until game.board.width
+                  position = Pos(x, y)
+                  appearance =
+                    if (position == game.player) ("@", "player", "You")
+                    else if (game.enemies.exists(_.position == position)) ("g", "enemy", "Goblin")
+                    else game.items.get(position) match {
+                      case Some(Item.Key) => ("k", "key", "Key")
+                      case Some(Item.Potion) => ("+", "potion", "Healing potion")
+                      case None if position == game.board.exit => (">", "exit", "Exit")
+                      case None if !game.board.isFloor(position) => ("#", "wall", "Wall")
+                      case _ => ("·", "floor", "Floor")
+                    }
+                } yield div(key := s"$x-$y", className := s"tile ${appearance._2}",
+                  title := s"${appearance._3} ($x, $y)")(appearance._1))
+              )
             ),
             p(className := "hint")("Click the map or Tab to focus · Arrow keys / WASD · Space to wait"),
             div(className := "legend")(

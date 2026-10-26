@@ -34,23 +34,6 @@ object Game {
     val start: Pos = floors.find(p => rows(p.y)(p.x) == 'S').get
     val exit: Pos = floors.find(p => rows(p.y)(p.x) == 'E').get
   }
-  val dungeon: Board = Board(Vector(
-    "###############",
-    "#S............#",
-    "#..###..###...#",
-    "#....#....#...#",
-    "#....#....#...#",
-    "#............##",
-    "#..##...##....#",
-    "#...#....#....#",
-    "#............##",
-    "#..###..###...#",
-    "#....#....#...#",
-    "#............##",
-    "#..##...##....#",
-    "#............E#",
-    "###############"
-  ))
   val maxHp = 10
   case class State(
       board: Board,
@@ -87,14 +70,18 @@ object Game {
 
   def initial(seed: Long): State = {
     val random = new Random(seed)
+    val generated = Dungeon.generate(random)
+    val dungeon = generated.board
+    val distances = Dungeon.distancesFrom(dungeon.floors.toSet, dungeon.start)
     val available = dungeon.floors.filter(p => p != dungeon.start && p != dungeon.exit)
     val enemyPositions = random.shuffle(available.filter(p =>
-      path(dungeon, dungeon.start, p).exists(_.size >= 4)
-    )).take(3)
-    val itemPositions = random.shuffle(available.filterNot(enemyPositions.contains)).take(3)
+      distances(p) >= 4
+    )).take(generated.roomCount - 3)
+    val items = Vector(Item.Key) ++ Vector.fill((generated.roomCount + 1) / 2)(Item.Potion)
+    val itemPositions = random.shuffle(available.filterNot(enemyPositions.contains)).take(items.size)
     State(dungeon, dungeon.start,
       enemies = enemyPositions.zipWithIndex.map((p, id) => Enemy(id, p)),
-      items = itemPositions.zip(Vector(Item.Key, Item.Potion, Item.Potion)).toMap)
+      items = itemPositions.zip(items).toMap)
   }
 
   def step(state: State, action: Action): State = {

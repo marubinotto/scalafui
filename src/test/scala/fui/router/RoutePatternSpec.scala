@@ -5,7 +5,7 @@ import org.scalatest.funsuite.AnyFunSuite
 class RoutePatternSpec extends AnyFunSuite {
   case class Id(value: String)
 
-  implicit object IdCodec extends Codec[Id] {
+  given IdCodec: Codec[Id] with {
     override def encode(value: Id): Option[String] = Some(value.value)
     override def decode(value: Option[String]): Option[Id] = value.map(Id(_))
   }

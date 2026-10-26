@@ -25,7 +25,7 @@ object Server {
     )
 
   val worksDecoder = new Decoder[Seq[Work]] {
-    implicit val workSeqDecoder: Decoder[Seq[Work]] =
+    given workSeqDecoder: Decoder[Seq[Work]] =
       Decoder.decodeSeq(using workDecoder)
     final def apply(c: HCursor): Decoder.Result[Seq[Work]] =
       for {
@@ -65,7 +65,7 @@ object Server {
     )
 
   val editionsDecoder = new Decoder[Seq[Edition]] {
-    implicit val editionSeqDecoder: Decoder[Seq[Edition]] =
+    given editionSeqDecoder: Decoder[Seq[Edition]] =
       Decoder.decodeSeq(using editionDecoder)
     final def apply(c: HCursor): Decoder.Result[Seq[Edition]] =
       for {

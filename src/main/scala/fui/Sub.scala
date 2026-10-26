@@ -24,7 +24,7 @@ sealed trait Sub[+Msg] {
 }
 
 object Sub {
-  implicit object MonoidKSub extends MonoidK[Sub] {
+  given MonoidKSub: MonoidK[Sub] with {
     def empty[Msg]: Sub[Msg] = Sub.Empty
     def combineK[Msg](sub1: Sub[Msg], sub2: Sub[Msg]): Sub[Msg] =
       sub1.combine(sub2)

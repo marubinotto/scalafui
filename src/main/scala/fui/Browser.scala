@@ -106,12 +106,11 @@ object Browser {
   ): Cmd.One[Either[Throwable, Result]] =
     Cmd(IO.async { cb =>
       IO {
-        implicit val resultDecoder: Decoder[Result] = decoder
         dom.fetch(url).flatMap(_.text()).onComplete {
           // Returning a Right even when the process has failed so that
           // the error can be handled as a Msg.
           case Success(text) => {
-            val decoded = decode[Result](text)
+            val decoded = decode[Result](text)(using decoder)
             cb(Right(Some(decoded)))
           }
           case Failure(t) => {

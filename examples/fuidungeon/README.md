@@ -6,6 +6,8 @@ your HP runs out. **New expedition** chooses
 the room count, terrain, and placements automatically; there is no setup screen
 or save state.
 
+![](screenshot.png)
+
 ## Run locally
 
 Requirements: sbt, Node.js 22.22.2+ (22.x), 24.15.0+ (24.x), or 26+, and Yarn

@@ -187,7 +187,7 @@ Use `Cmd.Batch` for independent commands, `Cmd.One.flatMap` to chain commands th
 
 ## Routing
 
-Scalafui uses Scala 3 and includes `fui.router`, adapted from Cotoami's router with query parameter support. The Multipage example no longer depends on Trail.
+Scalafui uses Scala 3 and includes `fui.router`, which is a modified version of [trail](https://github.com/sparsetech/trail).
 
 ```scala
 import fui.router._

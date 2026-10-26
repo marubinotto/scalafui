@@ -6,7 +6,7 @@ your HP runs out. **New expedition** chooses
 the room count, terrain, and placements automatically; there is no setup screen
 or save state.
 
-![](screenshot.png)
+<img alt="screenshot" src="screenshot.png" width="60%">
 
 ## Run locally
 

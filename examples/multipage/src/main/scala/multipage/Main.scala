@@ -157,7 +157,7 @@ object Main {
             Some(UrlChanged(_))
           ),
           dispatcher
-        )
-      } *> IO.never
+        ).use(_ => IO.never)
+      }
     }
 }

@@ -5,6 +5,7 @@ import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
 import cats.effect.{Deferred, IO, Resource}
 import cats.effect.std.Dispatcher
+import cats.syntax.all.*
 import cats.effect.unsafe.implicits.global
 import org.scalajs.dom
 import org.scalatest.funsuite.AsyncFunSuite
@@ -37,8 +38,8 @@ class RuntimeSpec extends AsyncFunSuite {
 
   test("reentrant dispatch is queued and updates are processed without nesting") {
     environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
-      for {
-        done <- Deferred[IO, Unit]
+      (for {
+        done <- Resource.eval(Deferred[IO, Unit])
         events = scala.collection.mutable.ArrayBuffer.empty[String]
         runtimeRef = new Array[Runtime[Int, Int]](1)
         runtime <- Runtime.make(dom.document.getElementById("app"), Program[Int, Int](
@@ -51,16 +52,17 @@ class RuntimeSpec extends AsyncFunSuite {
             (model + msg, if (msg == 2) Cmd(done.complete(()).as(None)) else Cmd.none)
           }
         ), dispatcher)
-        _ <- IO { runtimeRef(0) = runtime; runtime.dispatch(1) }
-        _ <- done.get.timeout(2.seconds)
+        _ <- Resource.eval(IO { runtimeRef(0) = runtime; runtime.dispatch(1) })
+        _ <- Resource.eval(done.get.timeout(2.seconds))
       } yield assert(events.toList == List("start-1-0", "end-1", "start-2-1", "end-2"))
+      ).use(result => IO.pure(result))
     }}.unsafeToFuture()
   }
 
   test("initial view and subscription evaluation precede the initial command") {
     environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
-      for {
-        done <- Deferred[IO, Unit]
+      (for {
+        done <- Resource.eval(Deferred[IO, Unit])
         events = scala.collection.mutable.ArrayBuffer.empty[String]
         _ <- Runtime.make(dom.document.getElementById("app"), Program[Int, Int](
           _ => (7, Cmd(IO { events += "command"; Some(1) })),
@@ -68,15 +70,16 @@ class RuntimeSpec extends AsyncFunSuite {
           (_, model) => (model + 1, Cmd(done.complete(()).as(None))),
           _ => { events += "subscriptions"; Sub.Empty }
         ), dispatcher)
-        _ <- done.get.timeout(2.seconds)
+        _ <- Resource.eval(done.get.timeout(2.seconds))
       } yield assert(events.take(4).toList == List("view-7", "subscriptions", "command", "view-8"))
+      ).use(result => IO.pure(result))
     }}.unsafeToFuture()
   }
 
   test("a burst of messages is retained and debounced commands keep only the last value") {
     environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
-      for {
-        done <- Deferred[IO, (Int, Int)]
+      (for {
+        done <- Resource.eval(Deferred[IO, (Int, Int)])
         runtime <- Runtime.make(dom.document.getElementById("app"), Program[Int, Int](
           _ => (0, Cmd.none),
           (model, _) => div(model.toString),
@@ -84,41 +87,43 @@ class RuntimeSpec extends AsyncFunSuite {
             if (msg < 0) (model, Cmd(done.complete((model, msg)).as(None)))
             else (model + 1, Browser.send(-msg).debounce("burst", 30))
         ), dispatcher)
-        _ <- IO((1 to 100).foreach(runtime.dispatch))
-        count <- done.get.timeout(3.seconds)
+        _ <- Resource.eval(IO((1 to 100).foreach(runtime.dispatch)))
+        count <- Resource.eval(done.get.timeout(3.seconds))
       } yield assert(count == (100, -100))
+      ).use(result => IO.pure(result))
     }}.unsafeToFuture()
   }
 
   test("pushUrl and popstate dispatch URL changes") {
     environment.use { env => Dispatcher.parallel[IO].use { dispatcher =>
-      for {
-        pushed <- Deferred[IO, String]
-        popped <- Deferred[IO, String]
+      (for {
+        pushed <- Resource.eval(Deferred[IO, String])
+        popped <- Resource.eval(Deferred[IO, String])
         runtime <- Runtime.make(dom.document.getElementById("app"), Program[Int, String](
           _ => (0, Cmd.none),
           (model, _) => div(model.toString),
           (msg, model) => (model + 1, Cmd((if (model == 0) pushed else popped).complete(msg).as(None))),
           onUrlChange = Some(_.pathname)
         ), dispatcher)
-        _ <- IO(runtime.onPushUrl(new dom.URL("https://example.test/pushed")))
-        first <- pushed.get.timeout(2.seconds)
-        _ <- IO {
+        _ <- Resource.eval(IO(runtime.onPushUrl(new dom.URL("https://example.test/pushed"))))
+        first <- Resource.eval(pushed.get.timeout(2.seconds))
+        _ <- Resource.eval(IO {
           dom.window.history.pushState(null, "", "/popped")
           env._1.window.dispatchEvent(js.Dynamic.newInstance(env._1.window.PopStateEvent)("popstate"))
-        }
-        second <- popped.get.timeout(2.seconds)
+        })
+        second <- Resource.eval(popped.get.timeout(2.seconds))
       } yield assert(first == "/pushed" && second == "/popped")
+      ).use(result => IO.pure(result))
     }}.unsafeToFuture()
   }
 
   test("subscriptions retain identity, cancel on removal, and restart when re-added") {
     environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
-      for {
-        starts <- cats.effect.Ref.of[IO, Int](0)
-        started <- cats.effect.std.Queue.unbounded[IO, Int]
-        stopped <- cats.effect.std.Queue.unbounded[IO, Unit]
-        updated <- cats.effect.std.Queue.unbounded[IO, Unit]
+      (for {
+        starts <- Resource.eval(cats.effect.Ref.of[IO, Int](0))
+        started <- Resource.eval(cats.effect.std.Queue.unbounded[IO, Int])
+        stopped <- Resource.eval(cats.effect.std.Queue.unbounded[IO, Unit])
+        updated <- Resource.eval(cats.effect.std.Queue.unbounded[IO, Unit])
         sub = Sub.fromCallback[Boolean]("external") { _ =>
           starts.updateAndGet(_ + 1).flatMap(started.offer).as(stopped.offer(()))
         }
@@ -128,19 +133,162 @@ class RuntimeSpec extends AsyncFunSuite {
           (msg, _) => (msg, Cmd(updated.offer(()).as(None))),
           active => if (active) sub else Sub.Empty
         ), dispatcher)
-        first <- started.take.timeout(2.seconds)
-        _ <- IO(runtime.dispatch(true))
-        _ <- updated.take.timeout(2.seconds)
-        unchanged <- starts.get
-        _ <- IO(runtime.dispatch(false))
-        _ <- updated.take.timeout(2.seconds)
-        _ <- stopped.take.timeout(2.seconds)
-        _ <- IO(runtime.dispatch(true))
-        _ <- updated.take.timeout(2.seconds)
-        second <- started.take.timeout(2.seconds)
-        _ <- IO(runtime.dispatch(false))
-        _ <- stopped.take.timeout(2.seconds)
+        first <- Resource.eval(started.take.timeout(2.seconds))
+        _ <- Resource.eval(IO(runtime.dispatch(true)))
+        _ <- Resource.eval(updated.take.timeout(2.seconds))
+        unchanged <- Resource.eval(starts.get)
+        _ <- Resource.eval(IO(runtime.dispatch(false)))
+        _ <- Resource.eval(updated.take.timeout(2.seconds))
+        _ <- Resource.eval(stopped.take.timeout(2.seconds))
+        _ <- Resource.eval(IO(runtime.dispatch(true)))
+        _ <- Resource.eval(updated.take.timeout(2.seconds))
+        second <- Resource.eval(started.take.timeout(2.seconds))
+        _ <- Resource.eval(IO(runtime.dispatch(false)))
+        _ <- Resource.eval(stopped.take.timeout(2.seconds))
       } yield assert(first == 1 && unchanged == 1 && second == 2)
+      ).use(result => IO.pure(result))
     }}.unsafeToFuture()
   }
+
+  test("normal, failed and canceled use await command and subscription cleanup exactly once") {
+    environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
+      List("normal", "failed", "canceled").traverse_ { mode =>
+        for {
+          commandStarted <- Deferred[IO, Unit]
+          subStarted <- Deferred[IO, Unit]
+          cleanups <- cats.effect.Ref.of[IO, List[String]](Nil)
+          command = Cmd[Unit]((commandStarted.complete(()) *> IO.never[Option[Unit]])
+            .guarantee(IO.sleep(10.millis) *> cleanups.update("command" :: _)))
+          sub = Sub.fromCallback[Unit]("cleanup") { _ =>
+            subStarted.complete(()).as(IO.sleep(10.millis) *> cleanups.update("sub" :: _))
+          }
+          resource = Runtime.make(dom.document.getElementById("app"), Program[Int, Unit](
+            _ => (0, command), (model, _) => div(model.toString),
+            (_, model) => (model, Cmd.none), _ => sub
+          ), dispatcher)
+          ready = commandStarted.get *> subStarted.get
+          _ <- mode match {
+            case "normal" => resource.use(_ => ready)
+            case "failed" => resource.use(_ => ready *> IO.raiseError[Unit](new Exception("use failed")))
+              .attempt.flatMap(result => IO(assert(result.isLeft)))
+            case _ => for {
+              fiber <- resource.use(_ => ready *> IO.never).start
+              _ <- ready
+              _ <- fiber.cancel
+            } yield ()
+          }
+          result <- cleanups.get
+          _ <- IO {
+            assert(result.sorted == List("command", "sub"))
+            assert(dom.document.getElementById("app").childNodes.length == 0)
+          }
+        } yield ()
+      }.as(succeed)
+    }}.timeout(5.seconds).unsafeToFuture()
+  }
+
+  test("release clears pending debounce and ignores retained dispatch callbacks") {
+    environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
+      for {
+        executions <- cats.effect.Ref.of[IO, Int](0)
+        updates = scala.collection.mutable.ArrayBuffer.empty[Int]
+        runtime <- Runtime.make(dom.document.getElementById("app"), Program[Int, Int](
+          _ => (0, Cmd(executions.update(_ + 1).as(None)).debounce("pending", 100)),
+          (model, _) => div(model.toString),
+          (msg, model) => { updates += msg; (model, Cmd.none) }
+        ), dispatcher).use(IO.pure)
+        _ <- IO(runtime.dispatch(1))
+        _ <- IO.sleep(150.millis)
+        count <- executions.get
+      } yield assert(count == 0 && updates.isEmpty)
+    }}.unsafeToFuture()
+  }
+
+  test("URL registrations are removed and another Runtime sharing the Dispatcher survives") {
+    environment.use { env => Dispatcher.parallel[IO].use { dispatcher =>
+      for {
+        seen <- cats.effect.std.Queue.unbounded[IO, String]
+        conversions = scala.collection.mutable.ArrayBuffer.empty[String]
+        other <- IO {
+          val element = dom.document.createElement("div")
+          dom.document.body.appendChild(element)
+          element
+        }
+        program = (name: String) => Program[Int, String](
+          _ => (0, Cmd.none), (model, _) => div(model.toString),
+          (msg, model) => (model, Cmd(seen.offer(msg).as(None))),
+          onUrlChange = Some(url => { conversions += name; name + url.pathname })
+        )
+        _ <- Browser.runProgram(other, program("live"), dispatcher).use { _ =>
+          Browser.runProgram(dom.document.getElementById("app"), program("closed"), dispatcher)
+            .use(_ => IO.unit) *>
+            Browser.pushUrl[Unit]("/push").io *>
+            seen.take.flatMap(msg => IO(assert(msg == "live/push"))) *>
+            IO(env._1.window.dispatchEvent(js.Dynamic.newInstance(env._1.window.PopStateEvent)("popstate"))) *>
+            seen.take.flatMap(msg => IO(assert(msg == "live/push")))
+        }
+        _ <- Browser.pushUrl[Unit]("/after").io
+      } yield assert(conversions.toList == List("live", "live"))
+    }}.timeout(3.seconds).unsafeToFuture()
+  }
+
+  test("startup failures unmount the root and unregister popstate before remounting") {
+    environment.use { env => Dispatcher.parallel[IO].use { dispatcher =>
+      val stages = List("init", "view", "subscriptions")
+      stages.traverse_ { stage =>
+        val conversions = scala.collection.mutable.ArrayBuffer.empty[String]
+        val failure = new Exception(stage)
+        val program = Program[Int, Unit](
+          _ => if (stage == "init") throw failure else (0, Cmd.none),
+          (model, _) => if (stage == "view") throw failure else div(model.toString),
+          (_, model) => (model, Cmd.none),
+          _ => if (stage == "subscriptions") throw failure else Sub.Empty,
+          Some(_ => { conversions += "url"; () })
+        )
+        for {
+          result <- Runtime.make(dom.document.getElementById("app"), program, dispatcher).use(_ => IO.unit).attempt
+          _ <- IO {
+            env._1.window.dispatchEvent(js.Dynamic.newInstance(env._1.window.PopStateEvent)("popstate"))
+            assert(result == Left(failure))
+            assert(conversions.isEmpty)
+            assert(dom.document.getElementById("app").childNodes.length == 0)
+          }
+          _ <- Runtime.make(dom.document.getElementById("app"), program.copy[Int, Unit](
+            init = _ => (0, Cmd.none), view = (_, _) => div("remounted"), subscriptions = _ => Sub.Empty
+          ), dispatcher).use(_ => IO.unit)
+        } yield ()
+      }.as(succeed)
+    }}.unsafeToFuture()
+  }
+
+
+  test("a failing listener finalizer still cancels subscriptions and unmounts React") {
+    environment.use { env => Dispatcher.parallel[IO].use { dispatcher =>
+      for {
+        started <- Deferred[IO, Unit]
+        cleaned <- Deferred[IO, Unit]
+        original <- IO(env._1.window.removeEventListener)
+        result <- Runtime.make(dom.document.getElementById("app"), Program[Int, Unit](
+          _ => (0, Cmd.none), (_, _) => div("mounted"),
+          (_, model) => (model, Cmd.none),
+          _ => Sub.fromCallback[Unit]("cleanup")(_ => started.complete(()).as(cleaned.complete(()).void)),
+          Some(_ => ())
+        ), dispatcher).use { _ =>
+          started.get *> IO.sleep(30.millis) *> IO {
+            assert(dom.document.getElementById("app").textContent == "mounted")
+            env._1.window.removeEventListener = ((name: String, listener: js.Any) => {
+              original.call(env._1.window, name, listener)
+              throw new RuntimeException("remove failed")
+            }): js.Function2[String, js.Any, Unit]
+          }
+        }.attempt.guarantee(IO { env._1.window.removeEventListener = original })
+        cleanup <- cleaned.tryGet
+      } yield {
+        assert(result.isLeft)
+        assert(cleanup.contains(()))
+        assert(dom.document.getElementById("app").childNodes.length == 0)
+      }
+    }}.timeout(3.seconds).unsafeToFuture()
+  }
+
 }

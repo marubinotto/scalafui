@@ -1,81 +1,100 @@
 package fui
 
 import scala.collection.mutable.{Map as MutableMap}
-import scala.compiletime.uninitialized
-import scala.concurrent.Future
+import scala.scalajs.js
 import org.scalajs.dom
-import org.scalajs.dom.Element
-import org.scalajs.dom.URL
-import org.scalajs.dom.Event
+import org.scalajs.dom.{Element, Event, URL}
 
-import cats.effect.IO
-import cats.effect.std.Dispatcher
-import cats.effect.std.Queue
-
+import cats.effect.{FiberIO, IO, Ref, Resource}
+import cats.effect.std.{Dispatcher, Queue, Supervisor}
+import cats.syntax.all.*
+import slinky.core.facade.ReactElement
 import slinky.web.ReactDOMClient
 
 class Runtime[Model, Msg] private (
-    container: Element,
+    render: ReactElement => Unit,
     val program: Program[Model, Msg],
     dispatcher: Dispatcher[IO],
-    queue: Queue[IO, Msg]
+    queue: Queue[IO, Msg],
+    supervisor: Supervisor[IO],
+    private var state: Model
 ) {
-  private val reactRoot = ReactDOMClient.createRoot(container)
-  private var state: Model = uninitialized
-  private val subs: MutableMap[String, () => Future[Unit]] = MutableMap()
+  // Scala.js callbacks and the message loop share a single JS thread.
+  private var active = true
+  private val subs: MutableMap[String, FiberIO[Unit]] = MutableMap()
   private val debounceTimers: MutableMap[String, Int] = MutableMap()
 
   def dispatch(msg: Msg): Unit =
-    dispatcher.unsafeRunAndForget(queue.offer(msg))
+    if (active) dispatcher.unsafeRunAndForget(offer(msg))
 
-  private def apply(change: (Model, Cmd[Msg])): Unit = {
+  private def offer(msg: Msg): IO[Unit] =
+    IO.defer(if (active) queue.offer(msg) else IO.unit)
+
+  private def apply(change: (Model, Cmd[Msg])): IO[Unit] = {
     val (model, cmd) = change
-    state = model
-    reactRoot.render(program.view(model, dispatch))
-    run(cmd)
-    updateSubs(state)
+    IO {
+      state = model
+      render(program.view(model, dispatch))
+    } *> run(cmd) *> updateSubs(model)
   }
 
-  private def run(cmd: Cmd[Msg]): Unit =
-    cmd match {
-      case cmd @ Cmd.One(_, Some(Cmd.Debounce(key, delay))) => {
+  private def run(cmd: Cmd[Msg]): IO[Unit] = IO.defer {
+    if (!active) IO.unit
+    else cmd match {
+      case cmd @ Cmd.One(_, Some(Cmd.Debounce(key, delay))) => IO {
         debounceTimers.get(key).foreach(dom.window.clearTimeout)
-        val timer = dom.window.setTimeout(() => runOne(cmd), delay)
+        val timer = dom.window.setTimeout(() => {
+          debounceTimers.remove(key)
+          if (active) dispatcher.unsafeRunAndForget(runOne(cmd))
+        }, delay)
         debounceTimers.put(key, timer)
+        ()
       }
-      case cmd: Cmd.One[Msg]    => runOne(cmd)
-      case Cmd.Batch(cmds*) => for (cmd <- cmds) run(cmd)
+      case cmd: Cmd.One[Msg] => runOne(cmd)
+      case Cmd.Batch(cmds*) => cmds.toList.traverse_(run)
     }
+  }
 
-  private def runOne(cmd: Cmd.One[Msg]): Unit =
-    dispatcher.unsafeRunAndForget(
-      cmd.io.flatMap(optionMsg => IO(optionMsg.foreach(msg => dispatch(msg))))
-    )
+  private def runOne(cmd: Cmd.One[Msg]): IO[Unit] = IO.defer {
+    if (active) supervisor.supervise(cmd.io.flatMap(_.traverse_(offer))).void
+    else IO.unit
+  }
 
-  private def updateSubs(model: Model): Unit = {
+  private def updateSubs(model: Model): IO[Unit] = IO.defer {
     val nextSubs = Sub.toMap(program.subscriptions(model))
-    val keysToAdd = nextSubs.keySet.diff(subs.keySet)
-    val keysToRemove = subs.keySet.diff(nextSubs.keySet)
-    keysToAdd.foreach(key =>
-      nextSubs.get(key).foreach(stream =>
-        subs.update(
-          key,
-          dispatcher.unsafeRunCancelable(
-            stream.evalMap(queue.offer).compile.drain
-          )
-        )
+    val keysToAdd = nextSubs.keySet.diff(subs.keySet).toList
+    val keysToRemove = subs.keySet.diff(nextSubs.keySet).toList
+    keysToRemove.traverse_(key => IO(subs.remove(key)).flatMap(_.traverse_(_.cancel))) *>
+      keysToAdd.traverse_(key =>
+        supervisor.supervise(nextSubs(key).evalMap(offer).compile.drain)
+          .flatMap(fiber => IO { subs.update(key, fiber) })
       )
-    )
-    keysToRemove.foreach(key => subs.remove(key).foreach(_()))
   }
 
   def onPushUrl(url: URL): Unit =
-    program.onUrlChange.foreach(f => dispatch(f(url)))
+    if (active) program.onUrlChange.foreach(f => dispatch(f(url)))
 
   private def processNextMessage: IO[Unit] =
     queue.take.flatMap { msg =>
-      IO(apply(program.update(msg, state))) *> IO.cede
+      IO.defer(if (active) apply(program.update(msg, state)) else IO.unit) *> IO.cede
     }
+
+  private def stopAccepting: IO[Unit] = IO { active = false }
+
+  private def clearTimers: IO[Unit] =
+    IO(debounceTimers.values.toList).flatMap(_.traverse_(id => IO(dom.window.clearTimeout(id))))
+      .guarantee(IO(debounceTimers.clear()))
+
+  private def urlListener: Resource[IO, Unit] = program.onUrlChange match {
+    case None => Resource.unit[IO]
+    case Some(_) =>
+      Resource.make(IO {
+        val listener: js.Function1[Event, Unit] =
+          (_: Event) => if (active) onPushUrl(new URL(dom.window.location.href))
+        dom.window.addEventListener("popstate", listener)
+        listener
+      })(listener => IO(dom.window.removeEventListener("popstate", listener))).void
+  }
 }
 
 object Runtime {
@@ -83,28 +102,26 @@ object Runtime {
       container: Element,
       program: Program[Model, Msg],
       dispatcher: Dispatcher[IO]
-  ): IO[Runtime[Model, Msg]] =
+  ): Resource[IO, Runtime[Model, Msg]] =
     for {
-      queue <- Queue.unbounded[IO, Msg]
-      runtime = new Runtime(container, program, dispatcher, queue)
-      init = program.init(new URL(dom.window.location.href))
-      _ <- IO {
-        runtime.state = init._1
-        program.onUrlChange.foreach(onUrlChange =>
-          dom.window.addEventListener(
-            "popstate",
-            (_: Event) => runtime.dispatch(
-              onUrlChange(new URL(dom.window.location.href))
-            )
-          )
-        )
-        runtime.apply((init._1, Cmd.none))
-      }
-      _ <- IO(
-        dispatcher.unsafeRunAndForget(
-          runtime.processNextMessage.foreverM
-        )
+      root <- Resource.make(IO(ReactDOMClient.createRoot(container)))(root => IO(root.unmount()))
+      supervisor <- Supervisor[IO](await = false)
+      queue <- Resource.eval(Queue.unbounded[IO, Msg])
+      init <- Resource.eval(IO(program.init(new URL(dom.window.location.href))))
+      runtime <- Resource.eval(IO(new Runtime(
+        element => root.render(element), program, dispatcher, queue, supervisor, init._1
+      )))
+      // Finalizers run in reverse acquisition order: close inputs, stop work, unmount.
+      loop <- Resource.make(Ref.of[IO, Option[FiberIO[Unit]]](None))(
+        ref => ref.get.flatMap(_.traverse_(_.cancel))
       )
-      _ <- IO(runtime.run(init._2))
+      _ <- Resource.onFinalize(runtime.clearTimers)
+      _ <- runtime.urlListener
+      _ <- Resource.onFinalize(runtime.stopAccepting)
+      _ <- Resource.eval(runtime.apply((init._1, Cmd.none)))
+      _ <- Resource.eval(IO.uncancelable { _ =>
+        runtime.processNextMessage.foreverM.void.start.flatMap(fiber => loop.set(Some(fiber)))
+      })
+      _ <- Resource.eval(runtime.run(init._2))
     } yield runtime
 }

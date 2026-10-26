@@ -330,7 +330,7 @@ object Main {
           dom.document.getElementById("app"),
           Program(init, view, update),
           dispatcher
-        )
-      } *> IO.never
+        ).use(_ => IO.never)
+      }
     }
 }

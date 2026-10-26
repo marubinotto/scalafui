@@ -7,7 +7,7 @@ import scala.scalajs.js.JSStringOps.*
 import org.scalajs.dom
 import org.scalajs.dom.{Element, URL}
 
-import cats.effect.IO
+import cats.effect.{IO, Resource}
 import cats.effect.std.Dispatcher
 
 import io.circe.*
@@ -26,9 +26,15 @@ object Browser {
       container: Element,
       program: Program[Model, Msg],
       dispatcher: Dispatcher[IO]
-  ): IO[Unit] =
-    Runtime.make(container, program, dispatcher).map { runtime =>
-      listenersOnPushUrl = runtime.onPushUrl :: listenersOnPushUrl
+  ): Resource[IO, Unit] =
+    Runtime.make(container, program, dispatcher).flatMap { runtime =>
+      Resource.make(IO {
+        val listener: URL => Unit = runtime.onPushUrl
+        listenersOnPushUrl = listener :: listenersOnPushUrl
+        listener
+      })(listener => IO {
+        listenersOnPushUrl = listenersOnPushUrl.filterNot(_ eq listener)
+      }).map(_ => ())
     }
 
   def send[Msg](msg: Msg): Cmd.One[Msg] = Cmd(IO(Some(msg)))

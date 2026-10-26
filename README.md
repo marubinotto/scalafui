@@ -100,8 +100,8 @@ object Main {
           dom.document.getElementById("app"),
           Program(init, view, update),
           dispatcher
-        )
-      } *> IO.never
+        ).use(_ => IO.never)
+      }
     }
 }
 ```
@@ -218,7 +218,7 @@ Scalafui uses React 18 and creates one React root per Runtime. Keep `react` and 
 
 ## Application lifetime
 
-`Browser.runProgram(container, program, dispatcher)` now returns `IO[Unit]`; execute it inside a long-lived `Dispatcher.parallel[IO].use` scope. The examples keep that scope alive with `IO.never` and run the outer IO from a standard `main` method. Runtime construction is effectful through `Runtime.make`; direct construction is no longer supported.
+`Runtime.make(container, program, dispatcher)` returns `Resource[IO, Runtime[Model, Msg]]`, and `Browser.runProgram` returns `Resource[IO, Unit]`. Use `Browser.runProgram(...).use(_ => IO.never)` inside `Dispatcher.parallel[IO].use`. Leaving the resource scope stops message processing, cancels commands and subscriptions (waiting for their finalizers), clears debounce timers, removes URL listeners, and unmounts React. Partial startup failures also release acquired resources. Dispatch after release is ignored. The caller owns the Dispatcher; releasing one Runtime does not stop other Runtimes sharing it. Cancellation of browser operations such as fetch still depends on the individual command adapter.
 
 Messages are queued: `dispatch` schedules an update rather than updating the model synchronously. The initial view and subscriptions are set up before the initial command runs. Commands remain independently scheduled; the message queue does not guarantee command completion order.
 

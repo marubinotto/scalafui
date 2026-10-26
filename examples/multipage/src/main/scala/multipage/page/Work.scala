@@ -74,7 +74,7 @@ object Work {
   // VIEW
   //
 
-  def view(model: Model, dispatch: Msg => Unit): ReactElement =
+  def view(model: Model, @scala.annotation.unused dispatch: Msg => Unit): ReactElement =
     div(className := "work-container")(
       model.loadingWorkError.map(error =>
         div(className := "error")(error.toString())

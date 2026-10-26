@@ -185,6 +185,8 @@ state, and random initialization through `Cmd`.
 See the [fuidungeon README](examples/fuidungeon/README.md) for setup, controls,
 game rules, and development instructions.
 
+<img alt="screenshot" src="examples/fuidungeon/screenshot.png" width="30%">
+
 ## Browser commands
 
 `Browser.ajaxHead(url)` returns an `Either[Throwable, dom.Response]`; inspect the response status in your update function.

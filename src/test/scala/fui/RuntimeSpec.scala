@@ -150,6 +150,80 @@ class RuntimeSpec extends AsyncFunSuite {
     }}.unsafeToFuture()
   }
 
+  test("subscription re-addition waits for the previous cleanup to finish") {
+    environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
+      for {
+        events <- cats.effect.Ref.of[IO, List[String]](Nil)
+        starts <- cats.effect.Ref.of[IO, Int](0)
+        firstStarted <- Deferred[IO, Unit]
+        secondStarted <- Deferred[IO, Unit]
+        cleanupStarted <- Deferred[IO, Unit]
+        allowCleanup <- Deferred[IO, Unit]
+        sub = Sub.fromCallback[Boolean]("external") { _ =>
+          starts.updateAndGet(_ + 1).flatMap { generation =>
+            (events.update(_ :+ s"start-$generation") *>
+              (if (generation == 1) firstStarted else secondStarted).complete(()))
+              .as(
+                events.update(_ :+ s"cleanup-start-$generation") *>
+                  cleanupStarted.complete(()) *> allowCleanup.get *>
+                  events.update(_ :+ s"cleanup-end-$generation")
+              )
+          }
+        }
+        _ <- Runtime.make(dom.document.getElementById("app"), Program[Boolean, Boolean](
+          _ => (true, Cmd.none), (model, _) => div(model.toString),
+          (msg, _) => (msg, Cmd.none),
+          active => if (active) sub else Sub.Empty
+        ), dispatcher).use { runtime =>
+          (for {
+            _ <- firstStarted.get
+            _ <- IO { runtime.dispatch(false); runtime.dispatch(true) }
+            _ <- cleanupStarted.get
+            before <- events.get
+            _ <- IO(assert(before == List("start-1", "cleanup-start-1")))
+            _ <- allowCleanup.complete(())
+            _ <- secondStarted.get
+            after <- events.get
+            _ <- IO(assert(after == List(
+              "start-1", "cleanup-start-1", "cleanup-end-1", "start-2"
+            )))
+          } yield ()).timeout(2.seconds)
+            .guarantee(allowCleanup.complete(()).void)
+        }
+      } yield succeed
+    }}.unsafeToFuture()
+  }
+
+  test("batch commands run independently and both results reach update") {
+    environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
+      for {
+        slowStarted <- Deferred[IO, Unit]
+        allowSlow <- Deferred[IO, Unit]
+        fastUpdated <- Deferred[IO, Unit]
+        slowUpdated <- Deferred[IO, Unit]
+        updates = scala.collection.mutable.ArrayBuffer.empty[String]
+        slow = Cmd[String](slowStarted.complete(()) *> allowSlow.get.as(Some("slow")))
+        fast = Cmd[String](slowStarted.get.as(Some("fast")))
+        _ <- Runtime.make(dom.document.getElementById("app"), Program[Int, String](
+          _ => (0, Cmd.Batch(slow, fast)), (model, _) => div(model.toString),
+          (msg, model) => {
+            updates += msg
+            val updated = if (msg == "fast") fastUpdated else slowUpdated
+            (model + 1, Cmd(updated.complete(()).as(None)))
+          }
+        ), dispatcher).use { _ =>
+          (for {
+            _ <- fastUpdated.get
+            _ <- IO(assert(updates.toList == List("fast")))
+            _ <- allowSlow.complete(())
+            _ <- slowUpdated.get
+            _ <- IO(assert(updates.toList == List("fast", "slow")))
+          } yield ()).timeout(2.seconds)
+        }
+      } yield succeed
+    }}.unsafeToFuture()
+  }
+
   test("normal, failed and canceled use await command and subscription cleanup exactly once") {
     environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
       List("normal", "failed", "canceled").traverse_ { mode =>

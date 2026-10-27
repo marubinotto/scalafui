@@ -187,101 +187,287 @@ game rules, and development instructions.
 
 <img alt="screenshot" src="examples/fuidungeon/screenshot.png" width="30%">
 
-## Browser effects
+## Scalafui's basic concepts
 
-Browser operations return lazy `IO` values. Compose them first, then choose how
-to notify the application with `.toCmd`, `Cmd.exec`, or `Cmd.optional`.
+Scalafui separates an application's definition from its execution. `Program`
+defines how state changes and how it is displayed. `Runtime` holds the current
+state and runs the application. `Browser` provides effects for interacting with
+the browser, such as HTTP requests, storage, and navigation.
 
-```scala
-import fui.*
-import scala.concurrent.duration.*
+```mermaid
+flowchart TD
+  program["Program: defines init, update, view, subscriptions"]
+  program -. "functions executed by" .-> runtime
 
-val loadDraft = (
-  Browser.setLocalStorage("draft", "hello") *>
-    Browser.getLocalStorage("draft")
-).toCmd // emits Some("hello") as the message
+  subgraph runtime["Runtime: manages state and execution"]
+    init["init"] --> model["Model"]
+    init --> cmd["Cmd: execute IO"]
+    queue["Msg queue"] --> update["update"]
+    model --> update
+    update --> model
+    update --> cmd
+    model --> view["view"]
+    model --> subs["subscriptions: manage active streams"]
+    cmd -- "result message, if any" --> queue
+    subs -- "messages" --> queue
+  end
 
-val saveOnly = Cmd.exec(Browser.setLocalStorage("draft", "hello"))
-val request = Browser.ajaxGetJson("/data.json").toCmd.debounce("load", 500.millis)
+  view -- "React rendering" --> ui["UI"]
+  ui -- "UI event / dispatch" --> queue
+  cmd -- "browser effects" --> browser["Browser"]
+  browser --> environment["Browser environment: HTTP, storage, history, events"]
+  environment -- "external events" --> subs
 ```
 
-URL changes, reload, theme changes, and storage writes/removal return `IO[Unit]`.
-`getLocalStorage` returns `IO[Option[String]]`, with None for a missing key.
-HTTP, FileReader encoding, and geolocation retain their existing `Either` result
-types inside IO. `ajaxHead` returns the response even for a non-success HTTP status;
-inspect its status yourself.
+Follow the loop from a UI event: a message enters the queue, `update` produces a
+new Model, and `view` describes the resulting UI. Commands and subscriptions feed
+messages back into the same loop. The nodes inside Runtime execute the functions
+and effect descriptions supplied by Program; Program itself does not run them.
+Browser effects are one source of command work; commands can use other `IO`
+computations too.
 
-`createImage` now returns `IO[HTMLImageElement]` instead of Future, and
-`decodeBase64` returns `IO[Blob]`. Image loading and decoding begin only when
-the IO runs; loading or decoding failures fail the IO. Existing cancellation
-behavior is unchanged.
+### Program
 
-These return-type changes are breaking: remove Browser calls' `.io` accessors
-and obsolete `Msg` type arguments. Convert result-producing operations with
-`.map(Message.apply).toCmd`; wrap notification-free operations in `Cmd.exec`.
-Calling `.toCmd` on `IO[Unit]` emits Unit, so it is not a replacement for
-`Cmd.exec`. Apply command debounce after the conversion.
+`Program[Model, Msg]` brings together the functions that describe an application:
 
-`runProgram` remains a Resource, callback debounce helpers retain their
-signatures, and `Browser.send` remains available for compatibility.
+```scala
+Program(
+  init = init,
+  view = view,
+  update = update,
+  subscriptions = subscriptions,
+  onUrlChange = Some(UrlChanged.apply)
+)
+```
 
-## Command composition
+The names on the right refer to application-defined functions and a message
+constructor. Only `init`, `view`, and `update` are required. Subscriptions default
+to `Sub.Empty`, and URL change handling defaults to `None`.
 
-Compose computations with ordinary `IO`, then use `.toCmd` (available through
-`import fui.*`) to emit the result as a message. No implicit conversion is used.
+#### Model/View/Update
+
+- **Model** is the application's state, usually an immutable case class.
+- **Msg** describes something that happened, such as input, a button click, or a
+  completed request.
+- **View** turns the current Model into a Slinky `ReactElement`. Event handlers
+  use the supplied `dispatch: Msg => Unit` to send messages.
+- **Update** receives a message and the current Model, and returns the next Model
+  together with commands to execute.
+
+The application supplies these function signatures:
+
+```scala
+def init(url: URL): (Model, Cmd[Msg])
+def view(model: Model, dispatch: Msg => Unit): ReactElement
+def update(msg: Msg, model: Model): (Model, Cmd[Msg])
+```
+
+`init` receives the current browser URL and supplies the initial state and startup
+commands. Keep state transitions in `update` and describe side effects as commands.
+Return `Cmd.none` when no effect is needed. The minimal application above shows
+this loop using input and send messages.
+
+#### Commands
+
+A `Cmd[Msg]` describes work for Runtime to execute once, optionally returning a
+message. For example, an update can return a loading state and a command that
+fetches data; the command's result becomes a new message that updates the state.
+
+Compose effects with Cats Effect `IO`, then choose how to notify the application:
+
+- `.toCmd` emits the computed value as a message. It is available through
+  `import fui.*`; there is no implicit conversion.
+- `Cmd.exec(io)` runs the effect without emitting a message.
+- `Cmd.optional(io)` emits a message only when the result is `Some(message)`.
+- `Cmd.none` is an empty batch of commands.
 
 ```scala
 import cats.effect.IO
 import fui.*
 import scala.concurrent.duration.*
 
-def search(query: String): IO[String] = IO.pure(query)
-def saveDraft: IO[Unit] = IO.unit
 case class SearchCompleted(result: String)
 
-// Sequence effects before converting to a command.
+def search(query: String): IO[String] = IO.pure(query) // Example computation.
+def saveDraft: IO[Unit] = IO.unit
+
 val operation = saveDraft *> search("scala")
 val command = operation.map(SearchCompleted.apply).toCmd
-
-// Run without a message, or emit only when a result is present.
 val save = Cmd.exec(saveDraft)
 val optional = Cmd.optional(search("scala").map(result =>
   Option.when(result.nonEmpty)(SearchCompleted(result))
 ))
 
-// Independent commands: save immediately, debounce the whole search computation.
 val commands = Cmd.Batch(
   search("scala").map(SearchCompleted.apply).toCmd.debounce("search", 500.millis),
   save
 )
 ```
 
-`IO[Option[A]].toCmd` emits the Option itself (including None), and
-`IO[Unit].toCmd` emits Unit. Use `Cmd.optional` or `Cmd.exec` to suppress messages.
-All these constructors are lazy and preserve IO errors and cancellation.
+These constructors are lazy: creating a command does not execute its IO. They
+preserve IO errors and cancellation. `.toCmd` on `IO[Option[A]]` emits the Option
+itself, including `None`; on `IO[Unit]` it emits Unit. Use `Cmd.optional` or
+`Cmd.exec` when those results should not produce messages. To turn an IO failure
+into an application message, handle it in the IO before converting to a command,
+for example with `attempt.map(ResultReceived.apply).toCmd`.
 
 Use IO `flatMap` for dependent steps and Cats `sequence` / `parSequence` for
-sequential / parallel computations whose results should be collected before
-emitting one message. Batch commands instead emit independently as they finish;
-completion order is not guaranteed.
+sequential / parallel computations whose results should be collected into one
+message. `Cmd.Batch` runs commands independently, emitting results as they finish;
+completion order is not guaranteed. Commands can also be combined with `++`, and
+batches support append/prepend operations. `map` transforms emitted messages;
+`toNone` on a single command suppresses its message.
 
-Debounce applies only to a single command, with delays in milliseconds. It replaces
-pending commands with the same key but does not cancel work that has already
-started. `map` and `toNone` preserve that policy. `++` and Batch append/prepend
-operations remain available, and `Cmd.none` is an empty Batch.
+Debounce applies to a single command and takes a `FiniteDuration`, such as
+`500.millis`. A new command replaces pending work with the same key, but does not
+cancel work that has already started. Zero or negative delays do not wait.
+Compose the IO first, then attach debounce; extracting `.io` from a command loses
+its debounce policy. `map` and `toNone` preserve the policy. Runtime cancels
+pending debounce waits when it is released.
 
-Migration: `Cmd.One.flatMap` and `Cmd.One.sequenceOf` have been removed; compose
-the original IO computations before attaching command policies. Do not extract
-`.io` from a debounced command to compose it, since this discards its policy.
-`Cmd.none` now returns `Cmd.Batch`, not `Cmd.One`. `Cmd(io)`, direct
-`Cmd.One` construction and `Cmd.One.pure` remain supported.
+#### Subscriptions
+
+A `Sub[Msg]` describes an external event source that Runtime should listen to
+while it is needed. `subscriptions: Model => Sub[Msg]` selects those sources from
+the current Model. Unlike a command, a subscription can keep producing messages
+across many updates.
+
+```scala
+import fui.*
+import scala.concurrent.duration.*
+
+case class Model(running: Boolean)
+case class Tick(epochMillis: Long)
+
+def subscriptions(model: Model): Sub[Tick] =
+  if (model.running) Sub.every(1.second, "clock").map(Tick.apply)
+  else Sub.Empty
+```
+
+`Sub.every` emits Unix epoch milliseconds using `Clock[IO].realTime`.
+`Sub.timeout(duration, msg, id)` emits once after a delay; `Sub.fromEvent` adapts
+DOM events. Combine sources with `combine`, or use `Sub.Impl(id, stream)` for an
+`fs2.Stream[IO, Msg]`.
+
+For callback APIs, `Sub.fromCallback` takes a registration IO that returns a
+cleanup IO. This adapter accepts an API that returns an unregister function:
+
+```scala
+import cats.effect.IO
+import fui.*
+
+def externalEvents[Msg](register: (Msg => Unit) => (() => Unit)): Sub[Msg] =
+  Sub.fromCallback[Msg]("external-events") { emit =>
+    IO {
+      val unregister = register(emit)
+      IO(unregister())
+    }
+  }
+```
+
+Runtime compares subscription IDs after each update. New IDs start streams;
+removed IDs cancel streams and run their cleanup. Keeping an ID keeps its
+existing stream, even if `subscriptions` constructs a different stream for that
+ID. To restart a completed or stopped subscription, remove its ID in one update
+before adding it again. Registration failures must clean up any partially
+acquired external resources themselves.
+
+### Runtime
+
+Runtime connects the pieces of Program: it owns the current Model, processes
+messages, renders the view, starts commands, and maintains subscriptions.
+`dispatch` queues a message rather than updating the Model synchronously.
+Messages are processed one at a time, while commands execute independently;
+queueing messages does not impose command completion order.
+
+At startup, Runtime calls `init`, sets up the initial view and subscriptions,
+and then starts the initial command. For each subsequent message, it calls
+`update`, renders the returned Model, schedules the returned commands, and
+reconciles subscriptions with that Model.
+
+Scalafui uses React 18 and creates one React root per Runtime. Keep `react` and
+`react-dom` aligned at version 18.3.1 in applications.
+
+#### Application lifetime
+
+Running an application acquires resources, including a React root, background
+work, and event listeners. `Runtime.make(container, program, dispatcher)` returns
+`Resource[IO, Runtime[Model, Msg]]`. The usual browser entry point,
+`Browser.runProgram`, wraps it and returns `Resource[IO, Unit]`.
+
+Keep the application's resource scope open for as long as the UI should run.
+For an application-defined `program` and DOM `container`, the startup pattern is:
+
+```scala
+import cats.effect.IO
+import cats.effect.std.Dispatcher
+import fui.*
+
+val run: IO[Unit] =
+  Dispatcher.parallel[IO].use { dispatcher =>
+    Browser.runProgram(container, program, dispatcher).use(_ => IO.never)
+  }
+```
+
+The caller owns the Dispatcher and keeps it alive outside the application scope.
+Multiple Runtimes can share it; releasing one does not stop the others.
+
+Leaving the resource scope stops message processing, cancels commands and
+subscriptions while waiting for their finalizers, clears debounce timers,
+removes URL listeners, and unmounts React. Partial startup failures also release
+acquired resources. Dispatch after release is ignored. Cancellation of an
+underlying browser operation, such as fetch, depends on its adapter; canceling
+the command does not necessarily abort that operation.
+
+### Browser
+
+`Browser.runProgram` starts a Program in a DOM container and connects browser
+navigation to its URL change handler. Use the resource pattern above to manage
+its lifetime.
+
+The other Browser helpers provide browser effects as lazy `IO` values. Compose
+them first, then convert to commands when returning work from `init` or `update`:
+
+```scala
+import fui.*
+
+case class DraftLoaded(value: Option[String])
+
+val loadDraft = (
+  Browser.setLocalStorage("draft", "hello") *>
+    Browser.getLocalStorage("draft")
+).map(DraftLoaded.apply).toCmd
+
+val saveOnly = Cmd.exec(Browser.setLocalStorage("draft", "hello"))
+```
+
+The helpers cover these operations:
+
+| Operations | Result inside IO |
+| --- | --- |
+| `pushUrl`, `replaceUrl`, `reload`, `setHtmlTheme` | `Unit` |
+| `setLocalStorage`, `removeLocalStorage` | `Unit` |
+| `getLocalStorage` | `Option[String]`; `None` for a missing key |
+| `ajaxGetJson`, `ajaxGet`, `ajaxHead` | `Either` containing an error or the result |
+| `encodeAsBase64`, `getCurrentPosition` | `Either` containing an API-specific error or the result |
+| `decodeBase64` | `dom.Blob` |
+| `createImage` | `dom.HTMLImageElement` |
+
+HTTP, FileReader encoding, and geolocation report their asynchronous errors as
+`Left` values, which can be mapped into messages. `ajaxHead` returns the response
+even for a non-success HTTP status; inspect its status yourself. Image loading
+and Base64 decoding begin only when the IO runs, and failures fail the IO.
+`Browser.send(msg)` is also available to construct a command that emits a message.
 
 ## Routing
 
-Scalafui uses Scala 3 and includes `fui.router`, which is a modified version of [trail](https://github.com/sparsetech/trail).
+Routing connects the browser URL to application state, such as which page to
+show. Scalafui includes `fui.router`, a modified version of
+[trail](https://github.com/sparsetech/trail), for matching and generating URLs.
+The application decides what each route means for its Model.
 
 ```scala
-import fui.router._
+import fui.router.*
 
 val search = Root & Param[String]("query")
 val work = Root / "work" / Arg[String]()
@@ -291,62 +477,67 @@ search.url("Scala + UI") // Right("/?query=Scala+%2B+UI")
 paged.url(("123", "Scala", 2)) // Right("/work/123?query=Scala&page=2")
 ```
 
-Patterns match relative URLs containing a path, query and optional fragment. Required query parameters must be present and decode successfully; empty strings are valid. The first repeated value wins, unknown parameters and fragments are ignored, and path-only routes also match URLs with queries. Order more specific query patterns before path-only fallbacks. Both path arguments and query values use `Codec`; query encoding follows `URLSearchParams`.
+Use `Root` for the root path, `/` for literal segments or typed arguments, and
+`& Param[A](name)` for query parameters. Patterns match relative URLs containing
+a path, query, and optional fragment:
 
-## Rendering
+```scala
+import org.scalajs.dom.URL
 
-Scalafui uses React 18 and creates one React root per Runtime. Keep `react` and `react-dom` aligned at version 18.3.1 in applications.
+enum Page {
+  case Search(query: String)
+  case Work(id: String)
+  case NotFound
+}
 
-## Application lifetime
+def pageFromUrl(url: URL): Page =
+  (url.pathname + url.search + url.hash) match {
+    case search(query) => Page.Search(query)
+    case Root(_)       => Page.Search("")
+    case work(id)      => Page.Work(id)
+    case _             => Page.NotFound
+  }
+```
 
-`Runtime.make(container, program, dispatcher)` returns `Resource[IO, Runtime[Model, Msg]]`, and `Browser.runProgram` returns `Resource[IO, Unit]`. Use `Browser.runProgram(...).use(_ => IO.never)` inside `Dispatcher.parallel[IO].use`. Leaving the resource scope stops message processing, cancels commands and subscriptions (waiting for their finalizers), clears debounce timers, removes URL listeners, and unmounts React. Partial startup failures also release acquired resources. Dispatch after release is ignored. The caller owns the Dispatcher; releasing one Runtime does not stop other Runtimes sharing it. Cancellation of browser operations such as fetch still depends on the individual command adapter.
+Call this routing function from `init` to choose the initial page. Define a
+message such as `UrlChanged(url: URL)`, pass `onUrlChange = Some(UrlChanged.apply)`
+to Program, and handle that message in `update` by selecting the new page.
+See the [Multipage example](examples/multipage/src/main/scala/multipage/Main.scala)
+for a complete application with page-specific models and commands.
 
-Messages are queued: `dispatch` schedules an update rather than updating the model synchronously. The initial view and subscriptions are set up before the initial command runs. Commands remain independently scheduled; the message queue does not guarantee command completion order.
+With `Browser.runProgram`, `Browser.pushUrl(url)` adds a history entry without
+loading a new document and notifies the URL change handler. Browser back/forward
+navigation also reaches that handler through `popstate`. `pushUrl(url, notify =
+false)` suppresses its notification; `replaceUrl(url)` replaces the current
+history entry without notifying the handler.
+
+`RoutePattern.url(value)` returns `Either[RouteError, String]`. Handle errors
+explicitly or lift the result into IO before navigating:
+
+```scala
+import cats.effect.IO
+import fui.*
+
+val openWork = Cmd.exec(
+  IO.fromEither(work.url("123")).flatMap(url => Browser.pushUrl(url))
+)
+```
+
+`PathArgumentRejected` and `QueryParameterRejected(name)` report a Codec returning
+`None`; `EncodingFailed(underlying)` preserves an exception from encoding.
+Lifting a `Left` into IO fails the command; map errors to application messages
+instead if they should be displayed in the UI.
+
+Parsing returns `Option` and supports pattern matching as above. Required query
+parameters must be present and decode successfully; empty strings are valid.
+The first repeated value wins, unknown parameters and fragments are ignored,
+and path-only routes also match URLs with queries. Order more specific query
+patterns before path-only fallbacks. Both path arguments and query values use
+`Codec`; query encoding follows `URLSearchParams`.
 
 ## Tests
 
-Run `yarn install` at the repository root, then `sbt test`. Runtime tests use jsdom 30 and require the Node.js versions listed above; browser command tests stub storage and fetch. Tests run serially because they install temporary browser globals.
-
-## Subscriptions
-
-`Sub.Impl(id, stream)` now uses `fs2.Stream[IO, Msg]`. `Sub.timeout`, `Sub.every` and `Sub.fromEvent` retain their call signatures. Use `Sub.fromCallback` for external APIs: the registration IO returns an IO that unregisters the callback.
-
-```scala
-Sub.fromCallback[Msg]("external-events") { emit =>
-  IO {
-    val unregister = registerListener(emit)
-    IO(unregister())
-  }
-}
-```
-
-Runtime cancels a subscription's stream when its ID disappears, running its cleanup. IDs determine identity: changing a stream under an existing ID does not restart it. Remove the ID before adding it again to restart a completed or stopped subscription. Callback adapters must return their cleanup after registration; registration failures should release any partially acquired external resources themselves.
-
-## Typed time and URL generation
-
-`Sub.every` emits Unix epoch milliseconds obtained through `Clock[IO].realTime`.
-Its interval and `Cmd.One.debounce` delays use `FiniteDuration`:
-
-```scala
-import scala.concurrent.duration.*
-
-request.toCmd.debounce("search", 500.millis)
-```
-
-Debounce replaces only pending work with the same key. Commands already started
-continue independently. Zero or negative delays do not wait. Pending waits use
-`IO.sleep` and are canceled when the Runtime resource is released.
-The old numeric-millisecond debounce API and both `Browser.debounce` helpers
-have been removed; use command debounce instead.
-
-`RoutePattern.url(value)` now returns `Either[RouteError, String]`.
-`PathArgumentRejected` and `QueryParameterRejected(name)` report a Codec returning
-`None`; `EncodingFailed(underlying)` preserves an exception from encoding.
-Handle the result explicitly, or lift it into IO before browser navigation:
-
-```scala
-Cmd.exec(IO.fromEither(route.url(value)).flatMap(url => Browser.pushUrl(url)))
-```
-
-The previous String-returning URL API is no longer available. URL parsing keeps
-its existing `Option` result and matching behavior.
+Run `yarn install` at the repository root, then `sbt test`. Runtime tests use
+jsdom 30 and require the Node.js versions listed above; browser command tests
+stub storage and fetch. Tests run serially because they install temporary
+browser globals.

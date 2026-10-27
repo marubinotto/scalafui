@@ -5,6 +5,7 @@ import io.circe.*
 import scala.scalajs.js.URIUtils
 
 import fui.*
+import cats.effect.IO
 
 import multipage.domain.Work
 import multipage.domain.Edition
@@ -33,7 +34,7 @@ object Server {
       } yield works
   }
 
-  def searchWorks(query: String): Cmd.One[Either[Throwable, Seq[Work]]] = {
+  def searchWorks(query: String): IO[Either[Throwable, Seq[Work]]] = {
     val encodedQuery = URIUtils.encodeURIComponent(query)
     Browser.ajaxGet(
       "https://openlibrary.org/search.json?q=" + encodedQuery,
@@ -41,7 +42,7 @@ object Server {
     )
   }
 
-  def fetchWork(id: String): Cmd.One[Either[Throwable, Work]] = {
+  def fetchWork(id: String): IO[Either[Throwable, Work]] = {
     Browser.ajaxGet(
       "https://openlibrary.org/works/" + id + ".json",
       workDecoder
@@ -75,7 +76,7 @@ object Server {
 
   def fetchEditions(
       workId: String
-  ): Cmd.One[Either[Throwable, Seq[Edition]]] = {
+  ): IO[Either[Throwable, Seq[Edition]]] = {
     val encodedWorkId = URIUtils.encodeURIComponent(workId)
     Browser.ajaxGet(
       "https://openlibrary.org/works/" + encodedWorkId + "/editions.json",

@@ -261,6 +261,40 @@ class RuntimeSpec extends AsyncFunSuite {
     }}.timeout(5.seconds).unsafeToFuture()
   }
 
+  test("Batch emits independently and debounce does not cancel an already started command") {
+    environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
+      for {
+        started <- Deferred[IO, Unit]
+        finish <- Deferred[IO, Unit]
+        seen <- cats.effect.std.Queue.unbounded[IO, Int]
+        canceled <- cats.effect.Ref.of[IO, Boolean](false)
+        slow = (started.complete(()) *> finish.get.as(1))
+          .onCancel(canceled.set(true)).toCmd.debounce("search", 1)
+        program = Program[Int, Int](
+          _ => (0, Cmd.Batch(slow, IO.pure(2).toCmd) ++ Cmd.none),
+          (model, _) => div(model.toString),
+          (msg, model) =>
+            if (msg == 0) (model, IO.pure(3).toCmd.debounce("search", 1))
+            else (model, Cmd.exec(seen.offer(msg)))
+        )
+        _ <- Runtime.make(dom.document.getElementById("app"), program, dispatcher).use { runtime =>
+          for {
+            _ <- started.get
+            immediate <- seen.take
+            _ <- IO(runtime.dispatch(0))
+            replacement <- seen.take
+            _ <- finish.complete(())
+            original <- seen.take
+            wasCanceled <- canceled.get
+          } yield {
+            assert(List(immediate, replacement, original) == List(2, 3, 1))
+            assert(!wasCanceled)
+          }
+        }
+      } yield succeed
+    }}.timeout(3.seconds).unsafeToFuture()
+  }
+
   test("release clears pending debounce and ignores retained dispatch callbacks") {
     environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
       for {
@@ -296,12 +330,12 @@ class RuntimeSpec extends AsyncFunSuite {
         _ <- Browser.runProgram(other, program("live"), dispatcher).use { _ =>
           Browser.runProgram(dom.document.getElementById("app"), program("closed"), dispatcher)
             .use(_ => IO.unit) *>
-            Browser.pushUrl[Unit]("/push").io *>
+            Browser.pushUrl("/push") *>
             seen.take.flatMap(msg => IO(assert(msg == "live/push"))) *>
             IO(env._1.window.dispatchEvent(js.Dynamic.newInstance(env._1.window.PopStateEvent)("popstate"))) *>
             seen.take.flatMap(msg => IO(assert(msg == "live/push")))
         }
-        _ <- Browser.pushUrl[Unit]("/after").io
+        _ <- Browser.pushUrl("/after")
       } yield assert(conversions.toList == List("live", "live"))
     }}.timeout(3.seconds).unsafeToFuture()
   }

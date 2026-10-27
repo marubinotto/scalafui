@@ -111,15 +111,15 @@ object Main {
       case EditingEntry(id, isEditing) =>
         (
           model.setEditing(id, isEditing),
-          Cmd(IO.async { cb =>
+          Cmd.exec(IO.async[Unit] { cb =>
             IO {
               dom.document.getElementById("todo-" + id) match {
                 case element: HTMLElement =>
                   setTimeout(100) {
                     element.focus()
-                    cb(Right(None))
+                    cb(Right(()))
                   }
-                case _ => cb(Right(None))
+                case _ => cb(Right(()))
               }
               None
             }

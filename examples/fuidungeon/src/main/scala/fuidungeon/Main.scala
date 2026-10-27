@@ -34,9 +34,7 @@ object Main {
 
   export Msg.*
 
-  private def newGame: Cmd[Msg] = Cmd.One(IO {
-    Some(Ready(scala.util.Random.nextLong()))
-  })
+  private def newGame: Cmd[Msg] = IO(Ready(scala.util.Random.nextLong())).toCmd
   def init(@annotation.unused url: URL): (Model, Cmd[Msg]) = (Model(), newGame)
   def update(msg: Msg, model: Model): (Model, Cmd[Msg]) = msg match {
     case Ready(seed) if model.game.isEmpty => (model.copy(game = Some(initial(seed)), flashes = Map.empty), Cmd.none)
@@ -71,7 +69,7 @@ object Main {
     }
     if (frame.state.status == Status.Descending)
       (shown.copy(pending = Vector.empty, playback = None, flashes = Map.empty),
-        Cmd.One(IO { Some(FloorReady(scala.util.Random.nextLong())) }))
+        IO(FloorReady(scala.util.Random.nextLong())).toCmd)
     else (shown, Cmd.none)
   }
 

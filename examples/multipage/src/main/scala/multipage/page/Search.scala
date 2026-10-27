@@ -27,7 +27,7 @@ object Search {
   def init(query: String): (Model, Cmd[Msg]) =
     (
       Model().copy(query = query, loading = true),
-      Server.searchWorks(query).map(SearchResult(query, _))
+      Server.searchWorks(query).map(SearchResult(query, _)).toCmd
     )
 
   //
@@ -58,16 +58,16 @@ object Search {
               loadingError = None,
               works = Seq.empty
             ),
-            Browser.replaceUrl(Route.search.url(()))
+            Cmd.exec(Browser.replaceUrl(Route.search.url(())))
               .debounce(DebounceKey, 1) // Cancel previous search
           )
         else
           (
             model.copy(query = query, loading = true, loadingError = None),
             Cmd.Batch(
-              Browser.replaceUrl(Route.searchWithQuery.url(query)),
+              Cmd.exec(Browser.replaceUrl(Route.searchWithQuery.url(query))),
               Server.searchWorks(query)
-                .map(SearchResult(query, _))
+                .map(SearchResult(query, _)).toCmd
                 .debounce(DebounceKey, 500)
             )
           )
@@ -87,7 +87,7 @@ object Search {
         )
 
       case FoundItemClicked(workId) =>
-        (model, Browser.pushUrl(Route.work.url(workId)))
+        (model, Cmd.exec(Browser.pushUrl(Route.work.url(workId))))
     }
 
   //

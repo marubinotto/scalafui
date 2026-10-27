@@ -30,8 +30,8 @@ object Work {
     (
       Model(workId),
       Cmd.Batch(
-        Server.fetchWork(workId).map(WorkFetched(_)),
-        Server.fetchEditions(workId).map(EditionsFetched(_))
+        Server.fetchWork(workId).map(WorkFetched(_)).toCmd,
+        Server.fetchEditions(workId).map(EditionsFetched(_)).toCmd
       )
     )
 

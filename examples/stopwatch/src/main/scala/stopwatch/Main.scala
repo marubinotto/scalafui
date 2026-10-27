@@ -57,7 +57,7 @@ object Main {
           (
             model,
             if (model.active)
-              Cmd.One(IO { Some(StartTime(System.currentTimeMillis())) })
+              IO(StartTime(System.currentTimeMillis())).toCmd
             else
               Cmd.none
           )

@@ -37,7 +37,7 @@ object Browser {
       }).map(_ => ())
     }
 
-  def send[Msg](msg: Msg): Cmd.One[Msg] = Cmd(IO(Some(msg)))
+  def send[Msg](msg: Msg): Cmd.One[Msg] = IO.pure(msg).toCmd
 
   def debounce[T](func: T => Unit, delay: Double): T => Unit = {
     var timeoutId: Option[Int] = None
@@ -64,71 +64,66 @@ object Browser {
     * @param notify
     *   whether or not to notify the url change via `onUrlChange`
     */
-  def pushUrl[Msg](url: String, notify: Boolean = true): Cmd.One[Msg] =
-    Cmd(IO {
+  def pushUrl(url: String, notify: Boolean = true): IO[Unit] =
+    IO {
       dom.window.history.pushState((), "", url)
       if (notify) {
         listenersOnPushUrl.foreach(_(new URL(dom.window.location.href)))
       }
-      None
-    })
+    }
 
   /** Change the URL, but do not trigger a page load. This will not add a new
     * entry to the browser history.
     */
-  def replaceUrl[Msg](url: String): Cmd.One[Msg] =
-    Cmd(IO {
+  def replaceUrl(url: String): IO[Unit] =
+    IO {
       dom.window.history.replaceState((), "", url)
-      None
-    })
+    }
 
-  def reload[Msg](): Cmd.One[Msg] =
-    Cmd(IO {
+  def reload(): IO[Unit] =
+    IO {
       dom.window.location.reload()
-      None
-    })
+    }
 
-  def ajaxGetJson(url: String): Cmd.One[Either[Throwable, Json]] =
-    Cmd(IO.async { cb =>
+  def ajaxGetJson(url: String): IO[Either[Throwable, Json]] =
+    IO.async { cb =>
       IO {
         dom.fetch(url).flatMap(_.text()).onComplete {
-          // Returning a Right even when the process has failed so that
-          // the error can be handled as a Msg.
+          // Keep network and decoding failures as values for the caller.
           case Success(text) => {
             val parseResult = parse(text)
-            cb(Right(Some(parseResult)))
+            cb(Right(parseResult))
           }
           case Failure(t) => {
-            cb(Right(Some(Left(t))))
+            cb(Right(Left(t)))
           }
         }
         None // no finalizer on cancellation
       }
-    })
+    }
 
   def ajaxGet[Result](
       url: String,
       decoder: Decoder[Result]
-  ): Cmd.One[Either[Throwable, Result]] =
-    Cmd(IO.async { cb =>
+  ): IO[Either[Throwable, Result]] =
+    IO.async { cb =>
       IO {
         dom.fetch(url).flatMap(_.text()).onComplete {
-          // Returning a Right even when the process has failed so that
-          // the error can be handled as a Msg.
+          // Keep network and decoding failures as values for the caller.
           case Success(text) => {
             val decoded = decode[Result](text)(using decoder)
-            cb(Right(Some(decoded)))
+            cb(Right(decoded))
           }
           case Failure(t) => {
-            cb(Right(Some(Left(t))))
+            cb(Right(Left(t)))
           }
         }
         None // no finalizer on cancellation
       }
-    })
+    }
 
-  def ajaxHead(url: String): Cmd.One[Either[Throwable, dom.Response]] =
-    Cmd(IO.async { cb =>
+  def ajaxHead(url: String): IO[Either[Throwable, dom.Response]] =
+    IO.async { cb =>
       IO {
         dom.fetch(
           url,
@@ -137,44 +132,39 @@ object Browser {
           }
         ).onComplete {
           case Success(response) => {
-            cb(Right(Some(Right(response))))
+            cb(Right(Right(response)))
           }
           case Failure(t) => {
-            cb(Right(Some(Left(t))))
+            cb(Right(Left(t)))
           }
         }
         None // no finalizer on cancellation
       }
-    })
+    }
 
-  def setHtmlTheme[Msg](theme: String): Cmd.One[Msg] =
-    Cmd(IO {
+  def setHtmlTheme(theme: String): IO[Unit] =
+    IO {
       dom.window.document.documentElement.setAttribute("data-theme", theme)
-      None
-    })
+    }
 
-  def setLocalStorage[Msg](key: String, value: String): Cmd.One[Msg] =
-    Cmd(IO {
+  def setLocalStorage(key: String, value: String): IO[Unit] =
+    IO {
       dom.window.localStorage.setItem(key, value)
-      None
-    })
+    }
 
-  def getLocalStorage(key: String): Cmd.One[Option[String]] =
-    Cmd(IO {
-      Some(Option(dom.window.localStorage.getItem(key)))
-    })
+  def getLocalStorage(key: String): IO[Option[String]] =
+    IO(Option(dom.window.localStorage.getItem(key)))
 
-  def removeLocalStorage[Msg](key: String): Cmd.One[Msg] =
-    Cmd(IO {
+  def removeLocalStorage(key: String): IO[Unit] =
+    IO {
       dom.window.localStorage.removeItem(key)
-      None
-    })
+    }
 
   def encodeAsBase64(
       blob: dom.Blob,
       removePadding: Boolean = false
-  ): Cmd.One[Either[dom.ProgressEvent, String]] =
-    Cmd(IO.async { cb =>
+  ): IO[Either[dom.ProgressEvent, String]] =
+    IO.async { cb =>
       IO {
         val reader = new dom.FileReader()
         reader.onload = _ => {
@@ -182,21 +172,21 @@ object Browser {
           val base64 = url.substring(url.indexOf(',') + 1)
           if (removePadding) {
             val base64WithoutPadding = base64.replaceAll("=+$", "")
-            cb(Right(Some(Right(base64WithoutPadding))))
+            cb(Right(Right(base64WithoutPadding)))
           } else {
-            cb(Right(Some(Right(base64))))
+            cb(Right(Right(base64)))
           }
         }
         reader.onerror = (e: dom.ProgressEvent) => {
-          cb(Right(Some(Left(e))))
+          cb(Right(Left(e)))
         }
         reader.readAsDataURL(blob)
 
         None // no finalizer on cancellation
       }
-    })
+    }
 
-  def decodeBase64(base64: String, contentType: String): dom.Blob = {
+  def decodeBase64(base64: String, contentType: String): IO[dom.Blob] = IO {
     val byteArray = js.typedarray.Uint8Array.from(
       // Window: atob()
       // decodes a string of data which has been encoded using Base64 encoding.
@@ -216,18 +206,18 @@ object Browser {
     )
   }
 
-  def getCurrentPosition: Cmd.One[Either[dom.PositionError, dom.Position]] =
-    Cmd(IO.async { cb =>
+  def getCurrentPosition: IO[Either[dom.PositionError, dom.Position]] =
+    IO.async { cb =>
       IO {
         dom.window.navigator.geolocation.getCurrentPosition(
-          position => cb(Right(Some(Right(position)))),
-          error => cb(Right(Some(Left(error))))
+          position => cb(Right(Right(position))),
+          error => cb(Right(Left(error)))
         )
         None
       }
-    })
+    }
 
-  def createImage(url: String): Future[dom.HTMLImageElement] = {
+  def createImage(url: String): IO[dom.HTMLImageElement] = IO.fromFuture(IO {
     val promise = Promise[dom.HTMLImageElement]()
 
     val image = new dom.Image()
@@ -245,5 +235,5 @@ object Browser {
     image.src = url
 
     promise.future
-  }
+  })
 }

@@ -3,7 +3,11 @@ package fui
 import scala.util.{Failure, Success}
 import scala.concurrent.Future
 import cats.effect.IO
-import cats.implicits.*
+
+extension [A](io: IO[A]) {
+  /** Convert a computation into a command that emits its result, including Unit or Option. */
+  def toCmd: Cmd.One[A] = Cmd.optional(io.map(value => Some(value)))
+}
 
 sealed trait Cmd[+Msg] extends Any {
   def map[OtherMsg](f: Msg => OtherMsg): Cmd[OtherMsg]
@@ -13,7 +17,13 @@ sealed trait Cmd[+Msg] extends Any {
 object Cmd {
   import org.scalajs.macrotaskexecutor.MacrotaskExecutor.Implicits.*
 
-  def apply[Msg](io: IO[Option[Msg]]): One[Msg] = One(io)
+  def apply[Msg](io: IO[Option[Msg]]): One[Msg] = optional(io)
+
+  /** Execute without emitting a message. Errors and cancellation are preserved. */
+  def exec[A](io: IO[A]): One[Nothing] = One(io.map(_ => None))
+
+  /** Emit only when the computation returns Some. */
+  def optional[Msg](io: IO[Option[Msg]]): One[Msg] = One(io)
 
   case class Debounce(key: String, delay: Double)
 
@@ -22,28 +32,20 @@ object Cmd {
     override def map[OtherMsg](f: Msg => OtherMsg): One[OtherMsg] =
       One(io.map(_.map(f)), debounce)
 
-    // This cmd must return some msg, otherwise the chained cmd will not execute.
-    def flatMap[OtherMsg](f: Msg => One[OtherMsg]): One[OtherMsg] =
-      One(io.flatMap(_.map(f(_).io).getOrElse(IO.none)), debounce)
-
     override def ++[LubMsg >: Msg](that: Cmd[LubMsg]): Cmd[LubMsg] =
       that match {
-        case o: One[LubMsg]         => Batch(this, o)
-        case Batch(cmds*)       => Batch.fromSeq(this +: cmds)
+        case o: One[LubMsg]   => Batch(this, o)
+        case Batch(cmds*)     => Batch.fromSeq(this +: cmds)
       }
 
-    def toNone[OtherMsg]: One[OtherMsg] = One(io.map(_ => None))
-
+    def toNone[OtherMsg]: One[OtherMsg] = One(io.map(_ => None), debounce)
 
     def debounce(key: String, delay: Double): One[Msg] =
       copy(debounce = Some(Debounce(key, delay)))
   }
 
   object One {
-    def pure[Msg](msg: Msg): One[Msg] = One(IO.pure(Some(msg)))
-
-    def sequenceOf[Msg](cmds: One[Msg]*): Cmd.One[Seq[Msg]] =
-      Cmd.One(cmds.map(_.io).sequence.map(msgs => Some(msgs.flatten)))
+    def pure[Msg](msg: Msg): One[Msg] = IO.pure(msg).toCmd
   }
 
   case class Batch[+Msg](cmds: One[Msg]*) extends Cmd[Msg] {
@@ -57,8 +59,8 @@ object Cmd {
 
     override def ++[LubMsg >: Msg](that: Cmd[LubMsg]): Cmd[LubMsg] =
       that match {
-        case o: One[LubMsg]         => Batch.fromSeq(cmds :+ o)
-        case Batch(cmds*)       => Batch.fromSeq(this.cmds ++ cmds)
+        case o: One[LubMsg]   => Batch.fromSeq(cmds :+ o)
+        case Batch(cmds*)     => Batch.fromSeq(this.cmds ++ cmds)
       }
   }
 
@@ -66,10 +68,10 @@ object Cmd {
     def fromSeq[Msg](cmds: Seq[One[Msg]]): Batch[Msg] = Batch(cmds*)
   }
 
-  def none[Msg]: One[Msg] = One(IO.none)
+  def none[Msg]: Batch[Msg] = Batch()
 
   def fromFuture[T](future: Future[T]): One[Either[Throwable, T]] =
-    One(IO.async { cb =>
+    optional(IO.async { cb =>
       IO {
         future.onComplete {
           case Success(value) => cb(Right(Some(Right(value))))

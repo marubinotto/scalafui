@@ -23,14 +23,10 @@ class DescentSpec extends AsyncFunSuite {
     assert(update(FloorReady(99), Model())._1 == Model())
     assert(update(FloorReady(99), Model(Some(game)))._1.game.contains(game))
 
-    (for {
-      seedMessage <- command.asInstanceOf[Cmd.One[Msg]].io
-      waitMessage <- waitCommand.asInstanceOf[Cmd.One[Msg]].io
-      moveMessage <- moveCommand.asInstanceOf[Cmd.One[Msg]].io
-      restartMessage <- restartCommand.asInstanceOf[Cmd.One[Msg]].io
-    } yield {
+    assert(waitCommand == Cmd.none && moveCommand == Cmd.none && restartCommand == Cmd.none)
+
+    command.asInstanceOf[Cmd.One[Msg]].io.map { seedMessage =>
       assert(seedMessage.exists(_.isInstanceOf[FloorReady]))
-      assert(waitMessage.isEmpty && moveMessage.isEmpty && restartMessage.isEmpty)
       val arrived = update(seedMessage.get, pending)._1
       val next = arrived.game.get
       assert(next.floor == 3 && next.hp == 3 && next.turns == 11)
@@ -39,6 +35,6 @@ class DescentSpec extends AsyncFunSuite {
       val lost = arrived.copy(game = Some(next.copy(hp = 0, status = Status.Lost)))
       assert(update(FloorReady(99), lost)._1 == lost)
       assert(update(Act(Action.Wait), lost)._1 == lost)
-    }).unsafeToFuture()
+    }.unsafeToFuture()
   }
 }

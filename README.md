@@ -187,15 +187,92 @@ game rules, and development instructions.
 
 <img alt="screenshot" src="examples/fuidungeon/screenshot.png" width="30%">
 
-## Browser commands
+## Browser effects
 
-`Browser.ajaxHead(url)` returns an `Either[Throwable, dom.Response]`; inspect the response status in your update function.
-`Browser.setLocalStorage(key, value)` and `removeLocalStorage(key)` perform storage operations without emitting a message.
-`Browser.getLocalStorage(key)` emits `Option[String]`, including `None` for a missing key.
+Browser operations return lazy `IO` values. Compose them first, then choose how
+to notify the application with `.toCmd`, `Cmd.exec`, or `Cmd.optional`.
+
+```scala
+import fui.*
+
+val loadDraft = (
+  Browser.setLocalStorage("draft", "hello") *>
+    Browser.getLocalStorage("draft")
+).toCmd // emits Some("hello") as the message
+
+val saveOnly = Cmd.exec(Browser.setLocalStorage("draft", "hello"))
+val request = Browser.ajaxGetJson("/data.json").toCmd.debounce("load", 500)
+```
+
+URL changes, reload, theme changes, and storage writes/removal return `IO[Unit]`.
+`getLocalStorage` returns `IO[Option[String]]`, with None for a missing key.
+HTTP, FileReader encoding, and geolocation retain their existing `Either` result
+types inside IO. `ajaxHead` returns the response even for a non-success HTTP status;
+inspect its status yourself.
+
+`createImage` now returns `IO[HTMLImageElement]` instead of Future, and
+`decodeBase64` returns `IO[Blob]`. Image loading and decoding begin only when
+the IO runs; loading or decoding failures fail the IO. Existing cancellation
+behavior is unchanged.
+
+These return-type changes are breaking: remove Browser calls' `.io` accessors
+and obsolete `Msg` type arguments. Convert result-producing operations with
+`.map(Message.apply).toCmd`; wrap notification-free operations in `Cmd.exec`.
+Calling `.toCmd` on `IO[Unit]` emits Unit, so it is not a replacement for
+`Cmd.exec`. Apply command debounce after the conversion.
+
+`runProgram` remains a Resource, callback debounce helpers retain their
+signatures, and `Browser.send` remains available for compatibility.
 
 ## Command composition
 
-Use `Cmd.Batch` for independent commands, `Cmd.One.flatMap` to chain commands that emit a message, or `Cmd.One.sequenceOf` to execute commands in order and collect their messages. `Cmd.Sequence` and `One.toBatch` have been removed.
+Compose computations with ordinary `IO`, then use `.toCmd` (available through
+`import fui.*`) to emit the result as a message. No implicit conversion is used.
+
+```scala
+import cats.effect.IO
+import fui.*
+
+def search(query: String): IO[String] = IO.pure(query)
+def saveDraft: IO[Unit] = IO.unit
+case class SearchCompleted(result: String)
+
+// Sequence effects before converting to a command.
+val operation = saveDraft *> search("scala")
+val command = operation.map(SearchCompleted.apply).toCmd
+
+// Run without a message, or emit only when a result is present.
+val save = Cmd.exec(saveDraft)
+val optional = Cmd.optional(search("scala").map(result =>
+  Option.when(result.nonEmpty)(SearchCompleted(result))
+))
+
+// Independent commands: save immediately, debounce the whole search computation.
+val commands = Cmd.Batch(
+  search("scala").map(SearchCompleted.apply).toCmd.debounce("search", 500),
+  save
+)
+```
+
+`IO[Option[A]].toCmd` emits the Option itself (including None), and
+`IO[Unit].toCmd` emits Unit. Use `Cmd.optional` or `Cmd.exec` to suppress messages.
+All these constructors are lazy and preserve IO errors and cancellation.
+
+Use IO `flatMap` for dependent steps and Cats `sequence` / `parSequence` for
+sequential / parallel computations whose results should be collected before
+emitting one message. Batch commands instead emit independently as they finish;
+completion order is not guaranteed.
+
+Debounce applies only to a single command, with delays in milliseconds. It replaces
+pending commands with the same key but does not cancel work that has already
+started. `map` and `toNone` preserve that policy. `++` and Batch append/prepend
+operations remain available, and `Cmd.none` is an empty Batch.
+
+Migration: `Cmd.One.flatMap` and `Cmd.One.sequenceOf` have been removed; compose
+the original IO computations before attaching command policies. Do not extract
+`.io` from a debounced command to compose it, since this discards its policy.
+`Cmd.none` now returns `Cmd.Batch`, not `Cmd.One`. `Cmd(io)`, direct
+`Cmd.One` construction and `Cmd.One.pure` remain supported.
 
 ## Routing
 

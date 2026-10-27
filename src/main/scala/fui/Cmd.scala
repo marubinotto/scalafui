@@ -1,6 +1,5 @@
 package fui
 
-import scala.util.{Failure, Success}
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import cats.effect.IO
@@ -16,8 +15,6 @@ sealed trait Cmd[+Msg] extends Any {
 }
 
 object Cmd {
-  import org.scalajs.macrotaskexecutor.MacrotaskExecutor.Implicits.*
-
   def apply[Msg](io: IO[Option[Msg]]): One[Msg] = optional(io)
 
   /** Execute without emitting a message. Errors and cancellation are preserved. */
@@ -71,14 +68,7 @@ object Cmd {
 
   def none[Msg]: Batch[Msg] = Batch()
 
-  def fromFuture[T](future: Future[T]): One[Either[Throwable, T]] =
-    optional(IO.async { cb =>
-      IO {
-        future.onComplete {
-          case Success(value) => cb(Right(Some(Right(value))))
-          case Failure(t)     => cb(Right(Some(Left(t))))
-        }
-        None
-      }
-    })
+  /** Evaluate the Future expression on each execution and emit failures as Left. */
+  def fromFuture[A](future: => Future[A]): One[Either[Throwable, A]] =
+    IO.fromFuture(IO(future)).attempt.toCmd
 }

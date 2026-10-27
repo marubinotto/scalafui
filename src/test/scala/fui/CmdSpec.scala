@@ -4,6 +4,7 @@ import cats.effect.{Deferred, IO, Outcome, Ref}
 import cats.effect.unsafe.implicits.global
 import fui.*
 import org.scalatest.funsuite.AsyncFunSuite
+import scala.concurrent.Future
 import scala.concurrent.duration.*
 
 class CmdSpec extends AsyncFunSuite {
@@ -27,6 +28,38 @@ class CmdSpec extends AsyncFunSuite {
       assert(runs == 3)
       assert(a.contains(7) && b.isEmpty && c.contains(11))
       assert(d.contains(None) && e.contains(()) && f.isEmpty)
+    }).unsafeToFuture()
+  }
+
+  test("fromFuture defers creation and evaluates the expression on each execution") {
+    var creations = 0
+    val command = Cmd.fromFuture {
+      creations += 1
+      Future.successful(creations)
+    }
+    assert(creations == 0)
+    (for {
+      first <- command.io
+      _ <- IO(assert(creations == 1))
+      second <- command.io
+    } yield {
+      assert(first == Some(Right(1)))
+      assert(second == Some(Right(2)))
+      assert(creations == 2)
+    }).unsafeToFuture()
+  }
+
+  test("fromFuture emits Future failures and synchronous creation exceptions as Left") {
+    val futureError = new RuntimeException("Future failed")
+    val creationError = new RuntimeException("creation failed")
+    val failed = Cmd.fromFuture(Future.failed[Int](futureError))
+    val throws = Cmd.fromFuture[Int](throw creationError)
+    (for {
+      failedResult <- failed.io
+      thrownResult <- throws.io
+    } yield {
+      assert(failedResult == Some(Left(futureError)))
+      assert(thrownResult == Some(Left(creationError)))
     }).unsafeToFuture()
   }
 

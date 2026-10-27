@@ -311,6 +311,13 @@ itself, including `None`; on `IO[Unit]` it emits Unit. Use `Cmd.optional` or
 into an application message, handle it in the IO before converting to a command,
 for example with `attempt.map(ResultReceived.apply).toCmd`.
 
+`Cmd.fromFuture(futureExpression)` takes its argument by name and evaluates it
+on each command execution, emitting `Right(value)` on success or `Left(error)`
+for a failed Future or a synchronous exception while creating it. Constructing
+the command does not evaluate the expression. Passing an already-created Future
+cannot defer its start; repeated executions then reuse that same Future.
+Canceling the command does not cancel the underlying Future.
+
 Use IO `flatMap` for dependent steps and Cats `sequence` / `parSequence` for
 sequential / parallel computations whose results should be collected into one
 message. `Cmd.Batch` runs commands independently, emitting results as they finish;

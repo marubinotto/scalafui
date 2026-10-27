@@ -109,98 +109,113 @@ object Main {
         p(className := "intro")("Find the key. Descend deeper. Stay alive.")
       ),
       model.game.fold[ReactElement](div(className := "loading", role := "status")("Preparing the dungeon…")) { game =>
-        val playing = game.status == Status.Playing && model.playback.isEmpty
-        val wide = Camera.offset(game.board, game.player, 15)
-        val narrow = Camera.offset(game.board, game.player, 9)
-        val mapStyle = scala.scalajs.js.Dynamic.literal(
-          "--map-width" -> s"${game.board.width * Camera.tileSize}px",
-          "--map-height" -> s"${game.board.height * Camera.tileSize}px",
-          "--wide-x" -> s"${wide.x}px", "--wide-y" -> s"${wide.y}px",
-          "--narrow-x" -> s"${narrow.x}px", "--narrow-y" -> s"${narrow.y}px"
-        )
-        def control(label: String, action: Action, css: String): ReactElement =
-          button(className := s"control $css", disabled := !playing,
-            onClick := (_ => dispatch(Act(action))))(label)
         div(className := "game-layout")(
-          section(className := "dungeon-panel")(
-            div(className := "panel-heading")(
-              span(className := "floor-number", aria-"live" := "polite")(f"FLOOR ${game.floor}%02d"),
-              span(className := "total-turns")(s"TOTAL TURNS ${game.turns}")
-            ),
-            div(className := "board", style := mapStyle, tabIndex := 0, role := "group",
-              aria-"label" := "Dungeon. Use arrow keys or WASD to move, Space to wait.",
-              onKeyDown := (event => {
-                actionForKey(event.key).foreach { action =>
-                  event.preventDefault()
-                  if (!event.repeat) dispatch(Act(action))
-                }
-              }))(
-              div(className := "map")(
-                (for {
-                  y <- 0 until game.board.height
-                  x <- 0 until game.board.width
-                  position = Pos(x, y)
-                  flash = flashAt(model, game, position)
-                  enemy = game.enemies.find(_.position == position)
-                  ghostKind = flash.filter(_.damage.defeated).flatMap(_.damage.kind)
-                  appearance =
-                    if (position == game.player) ("🤠", "player", "You")
-                    else if (enemy.nonEmpty) (enemy.get.kind.icon, "enemy", enemy.get.kind.label)
-                    else if (ghostKind.nonEmpty) (ghostKind.get.icon, "enemy", s"Defeated ${ghostKind.get.label}")
-                    else game.items.get(position) match {
-                      case Some(Item.Key) => ("🔑", "key", "Key")
-                      case Some(Item.Potion) => ("🧪", "potion", "Healing potion")
-                      case None if position == game.board.exit => ("🚪", "exit", "Next floor")
-                      case None if !game.board.isFloor(position) => ("#", "wall", "Wall")
-                      case _ => ("·", "floor", "Floor")
-                    }
-                } yield div(key := s"$x-$y", className := s"tile ${appearance._2}${if (flash.nonEmpty) " hit" else ""}",
-                  title := s"${appearance._3} ($x, $y)")(appearance._1))
-              )
-            ),
-            p(className := "hint")("Click the map or Tab to focus · Arrow keys / WASD · Space to wait"),
-            div(className := "legend")(
-              span("🤠 You"), span("🔑 Key"), span("🧪 Potion"), span("🚪 Next floor")
-            )
-          ),
-          aside(className := "sidebar")(
-            section(className := "card")(
-              h2("Your expedition"),
-              div(className := "stat")(span("HEALTH"), strong(s"${game.hp} / $maxHp")),
-              div(className := "health-track", aria-"hidden" := "true")(
-                div(className := "health-fill", style := scala.scalajs.js.Dynamic.literal(width = s"${game.hp * 10}%"))()
-              ),
-              div(className := "stat")(span("KEY"), strong(if (game.hasKey) "Collected" else "Not found")),
-              div(className := "stat")(span("ENEMIES"), strong(s"${game.enemies.size} remaining")),
-              p(className := "objective")("Find this floor’s key, then step onto 🚪 to descend. Your HP carries over. Walk into enemies to attack; potions restore 4 HP.")
-            ),
-            section(className := "card controls-card")(
-              h2("Make your move"),
-              div(className := "controls")(
-                control("↑", Action.Move(Direction.Up), "up"),
-                control("←", Action.Move(Direction.Left), "left"),
-                control("Wait", Action.Wait, "wait"),
-                control("→", Action.Move(Direction.Right), "right"),
-                control("↓", Action.Move(Direction.Down), "down")
-              ),
-              p(className := "hint")("The dungeon moves only when you do.")
-            ),
-            section(className := "card journal", aria-"live" := "polite")(
-              h2("Field notes"), ol(game.log.zipWithIndex.map { (entry, index) => li(key := index.toString)(entry) })
-            ),
-            div(className := s"result ${game.status.toString.toLowerCase}", role := "status")(
-              game.status match {
-                case Status.Playing => if (model.playback.nonEmpty) "Resolving turn…" else "Your next move awaits."
-                case Status.Descending => f"Descending to floor ${game.floor + 1}%02d…"
-                case Status.Lost => s"Expedition over. Reached Floor ${game.floor} in ${game.turns} turns."
-              }
-            ),
-            button(className := "restart", disabled := (game.status == Status.Descending), onClick := (_ => dispatch(Restart)))("New expedition ↗")
-          )
+          viewBoard(model, game, dispatch),
+          viewSidebar(model, game, dispatch)
         )
       },
       footer("Built with Scalafui · Scala.js · One action, one turn")
     )
+
+  case class TileAppearance(icon: String, cssClass: String, label: String)
+
+  def tileAppearance(game: State, position: Pos, flash: Option[Flash]): TileAppearance =
+    if (position == game.player) TileAppearance("🤠", "player", "You")
+    else game.enemies.find(_.position == position) match {
+      case Some(enemy) => TileAppearance(enemy.kind.icon, "enemy", enemy.kind.label)
+      case None =>
+        flash.filter(_.damage.defeated).flatMap(_.damage.kind) match {
+          case Some(kind) => TileAppearance(kind.icon, "enemy", s"Defeated ${kind.label}")
+          case None => game.items.get(position) match {
+            case Some(Item.Key) => TileAppearance("🔑", "key", "Key")
+            case Some(Item.Potion) => TileAppearance("🧪", "potion", "Healing potion")
+            case None if position == game.board.exit => TileAppearance("🚪", "exit", "Next floor")
+            case None if !game.board.isFloor(position) => TileAppearance("#", "wall", "Wall")
+            case _ => TileAppearance("·", "floor", "Floor")
+          }
+        }
+    }
+
+  private def viewBoard(model: Model, game: State, dispatch: Msg => Unit): ReactElement = {
+    val wide = Camera.offset(game.board, game.player, 15)
+    val narrow = Camera.offset(game.board, game.player, 9)
+    val mapStyle = scala.scalajs.js.Dynamic.literal(
+      "--map-width" -> s"${game.board.width * Camera.tileSize}px",
+      "--map-height" -> s"${game.board.height * Camera.tileSize}px",
+      "--wide-x" -> s"${wide.x}px", "--wide-y" -> s"${wide.y}px",
+      "--narrow-x" -> s"${narrow.x}px", "--narrow-y" -> s"${narrow.y}px"
+    )
+    section(className := "dungeon-panel")(
+      div(className := "panel-heading")(
+        span(className := "floor-number", aria-"live" := "polite")(f"FLOOR ${game.floor}%02d"),
+        span(className := "total-turns")(s"TOTAL TURNS ${game.turns}")
+      ),
+      div(className := "board", style := mapStyle, tabIndex := 0, role := "group",
+        aria-"label" := "Dungeon. Use arrow keys or WASD to move, Space to wait.",
+        onKeyDown := (event => {
+          actionForKey(event.key).foreach { action =>
+            event.preventDefault()
+            if (!event.repeat) dispatch(Act(action))
+          }
+        }))(
+        div(className := "map")(
+          (for {
+            y <- 0 until game.board.height
+            x <- 0 until game.board.width
+            position = Pos(x, y)
+            flash = flashAt(model, game, position)
+            appearance = tileAppearance(game, position, flash)
+          } yield div(key := s"$x-$y", className := s"tile ${appearance.cssClass}${if (flash.nonEmpty) " hit" else ""}",
+            title := s"${appearance.label} ($x, $y)")(appearance.icon))
+        )
+      ),
+      p(className := "hint")("Click the map or Tab to focus · Arrow keys / WASD · Space to wait"),
+      div(className := "legend")(
+        span("🤠 You"), span("🔑 Key"), span("🧪 Potion"), span("🚪 Next floor")
+      )
+    )
+  }
+
+  private def viewSidebar(model: Model, game: State, dispatch: Msg => Unit): ReactElement = {
+    val playing = game.status == Status.Playing && model.playback.isEmpty
+    def control(label: String, action: Action, css: String): ReactElement =
+      button(className := s"control $css", disabled := !playing,
+        onClick := (_ => dispatch(Act(action))))(label)
+    aside(className := "sidebar")(
+      section(className := "card")(
+        h2("Your expedition"),
+        div(className := "stat")(span("HEALTH"), strong(s"${game.hp} / $maxHp")),
+        div(className := "health-track", aria-"hidden" := "true")(
+          div(className := "health-fill", style := scala.scalajs.js.Dynamic.literal(width = s"${game.hp * 10}%"))()
+        ),
+        div(className := "stat")(span("KEY"), strong(if (game.hasKey) "Collected" else "Not found")),
+        div(className := "stat")(span("ENEMIES"), strong(s"${game.enemies.size} remaining")),
+        p(className := "objective")("Find this floor’s key, then step onto 🚪 to descend. Your HP carries over. Walk into enemies to attack; potions restore 4 HP.")
+      ),
+      section(className := "card controls-card")(
+        h2("Make your move"),
+        div(className := "controls")(
+          control("↑", Action.Move(Direction.Up), "up"),
+          control("←", Action.Move(Direction.Left), "left"),
+          control("Wait", Action.Wait, "wait"),
+          control("→", Action.Move(Direction.Right), "right"),
+          control("↓", Action.Move(Direction.Down), "down")
+        ),
+        p(className := "hint")("The dungeon moves only when you do.")
+      ),
+      section(className := "card journal", aria-"live" := "polite")(
+        h2("Field notes"), ol(game.log.zipWithIndex.map { (entry, index) => li(key := index.toString)(entry) })
+      ),
+      div(className := s"result ${game.status.toString.toLowerCase}", role := "status")(
+        game.status match {
+          case Status.Playing => if (model.playback.nonEmpty) "Resolving turn…" else "Your next move awaits."
+          case Status.Descending => f"Descending to floor ${game.floor + 1}%02d…"
+          case Status.Lost => s"Expedition over. Reached Floor ${game.floor} in ${game.turns} turns."
+        }
+      ),
+      button(className := "restart", disabled := (game.status == Status.Descending), onClick := (_ => dispatch(Restart)))("New expedition ↗")
+    )
+  }
 
   def main(args: Array[String]): Unit = run.unsafeRunAndForget()
   def run: IO[Unit] = Dispatcher.parallel[IO].use { dispatcher =>

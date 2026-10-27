@@ -25,11 +25,23 @@ object Main {
   // MODEL
   //
 
+  enum Visibility(val label: String, val uri: String) {
+    case All extends Visibility("All", "#/")
+    case Active extends Visibility("Active", "#/active")
+    case Completed extends Visibility("Completed", "#/completed")
+
+    def includes(entry: Entry): Boolean = this match {
+      case All => true
+      case Active => !entry.completed
+      case Completed => entry.completed
+    }
+  }
+
   case class Model(
       entries: Seq[Entry] = Seq.empty,
       taskInput: String = "",
       uid: Int = 0,
-      visibility: String = "All"
+      visibility: Visibility = Visibility.All
   ) {
     def add(description: String): Model =
       this.copy(
@@ -97,7 +109,7 @@ object Main {
     case DeleteComplete
     case Check(id: Int, isCompleted: Boolean)
     case CheckAll(isCompleted: Boolean)
-    case ChangeVisibility(visibility: String)
+    case ChangeVisibility(visibility: Visibility)
   }
 
   export Msg.*
@@ -176,18 +188,11 @@ object Main {
 
   def viewEntries(
       entries: Seq[Entry],
-      visibility: String,
+      visibility: Visibility,
       dispatch: Msg => Unit
   ): ReactElement = {
     val allCompleted = entries.forall(_.completed)
     val cssVisibility = if (entries.isEmpty) "hidden" else "visible"
-
-    def isVisible(entry: Entry) =
-      visibility match {
-        case "Completed" => entry.completed
-        case "Active"    => !entry.completed
-        case _           => true
-      }
 
     section(
       className := "main",
@@ -203,7 +208,7 @@ object Main {
       ),
       label(htmlFor := "toggle-all")("Mark all as complete"),
       ul(className := "todo-list")(
-        entries.filter(isVisible(_)).map(entry => viewEntry(entry, dispatch))
+        entries.filter(visibility.includes).map(entry => viewEntry(entry, dispatch))
       )
     )
   }
@@ -246,7 +251,7 @@ object Main {
 
   def viewControls(
       entries: Seq[Entry],
-      visibility: String,
+      visibility: Visibility,
       dispatch: Msg => Unit
   ): ReactElement = {
     val entriesCompleted = entries.count(_.completed)
@@ -267,31 +272,30 @@ object Main {
   }
 
   def viewControlsFilters(
-      visibility: String,
+      visibility: Visibility,
       dispatch: Msg => Unit
   ): ReactElement = {
     ul(className := "filters")(
-      visibilitySwap("#/", "All", visibility, dispatch),
+      visibilitySwap(Visibility.All, visibility, dispatch),
       " ",
-      visibilitySwap("#/active", "Active", visibility, dispatch),
+      visibilitySwap(Visibility.Active, visibility, dispatch),
       " ",
-      visibilitySwap("#/completed", "Completed", visibility, dispatch)
+      visibilitySwap(Visibility.Completed, visibility, dispatch)
     )
   }
 
   def visibilitySwap(
-      uri: String,
-      visibility: String,
-      actualVisibility: String,
+      visibility: Visibility,
+      actualVisibility: Visibility,
       dispatch: Msg => Unit
   ): ReactElement = {
     li(onClick := ((_) => dispatch(ChangeVisibility(visibility))))(
       a(
-        href := uri,
+        href := visibility.uri,
         className := optionalClasses(
           Seq(("selected", visibility == actualVisibility))
         )
-      )(visibility)
+      )(visibility.label)
     )
   }
 

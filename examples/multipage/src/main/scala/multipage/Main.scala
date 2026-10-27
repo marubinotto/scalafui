@@ -34,7 +34,7 @@ object Main {
   // MODEL
   //
 
-  case class Model(currentPage: Page) {
+  case class Model(currentPage: Page, pageSerial: Long = 0) {
     def setPage(page: Page): Model =
       this.copy(currentPage = page)
   }
@@ -56,8 +56,8 @@ object Main {
 
   enum Msg {
     case UrlChanged(url: URL)
-    case SearchPageMsg(pageMsg: page.Search.Msg)
-    case WorkPageMsg(pageMsg: page.Work.Msg)
+    case SearchPageMsg(pageSerial: Long, pageMsg: page.Search.Msg)
+    case WorkPageMsg(pageSerial: Long, pageMsg: page.Work.Msg)
   }
 
   export Msg.*
@@ -67,39 +67,42 @@ object Main {
       case (UrlChanged(url), _) =>
         applyUrlChange(url, model)
 
-      case (SearchPageMsg(pageMsg), SearchPage(pageModel)) =>
+      case (SearchPageMsg(serial, pageMsg), SearchPage(pageModel)) if serial == model.pageSerial =>
         applyPageUpdate(
           page.Search.update(pageMsg, pageModel),
           SearchPage.apply,
-          SearchPageMsg.apply,
+          SearchPageMsg(model.pageSerial, _),
           model
         )
 
-      case (WorkPageMsg(pageMsg), WorkPage(pageModel)) =>
+      case (WorkPageMsg(serial, pageMsg), WorkPage(pageModel)) if serial == model.pageSerial =>
         applyPageUpdate(
           page.Work.update(pageMsg, pageModel),
           WorkPage.apply,
-          WorkPageMsg.apply,
+          WorkPageMsg(model.pageSerial, _),
           model
         )
 
       case _ => (model, Cmd.none)
     }
 
-  def applyUrlChange(url: URL, model: Model): (Model, Cmd[Msg]) =
+  def applyUrlChange(url: URL, model: Model): (Model, Cmd[Msg]) = {
+    // Each visit owns its commands, including revisits to the same URL.
+    val nextModel = model.copy(pageSerial = model.pageSerial + 1)
     url.pathname + url.search + url.hash match {
       case Route.searchWithQuery(q) =>
-        applyPageUpdate(page.Search.init(q), SearchPage.apply, SearchPageMsg.apply, model)
+        applyPageUpdate(page.Search.init(q), SearchPage.apply, SearchPageMsg(nextModel.pageSerial, _), nextModel)
 
       case Route.search(_) =>
-        applyPageUpdate(page.Search.init(), SearchPage.apply, SearchPageMsg.apply, model)
+        applyPageUpdate(page.Search.init(), SearchPage.apply, SearchPageMsg(nextModel.pageSerial, _), nextModel)
 
       case Route.work(id) =>
-        applyPageUpdate(page.Work.init(id), WorkPage.apply, WorkPageMsg.apply, model)
+        applyPageUpdate(page.Work.init(id), WorkPage.apply, WorkPageMsg(nextModel.pageSerial, _), nextModel)
 
       case _ =>
-        (model.copy(currentPage = NotFoundPage), Cmd.none)
+        (nextModel.copy(currentPage = NotFoundPage), Cmd.none)
     }
+  }
 
   def applyPageUpdate[PageModel, PageMsg](
       pageUpdate: (PageModel, Cmd[PageMsg]),
@@ -129,10 +132,10 @@ object Main {
           div(className := "page-not-found")("Page Not Found")
 
         case SearchPage(pageModel) =>
-          page.Search.view(pageModel, mapDispatch(SearchPageMsg(_)))
+          page.Search.view(pageModel, mapDispatch(SearchPageMsg(model.pageSerial, _)))
 
         case WorkPage(pageModel) =>
-          page.Work.view(pageModel, mapDispatch(WorkPageMsg(_)))
+          page.Work.view(pageModel, mapDispatch(WorkPageMsg(model.pageSerial, _)))
       }
     )
   }

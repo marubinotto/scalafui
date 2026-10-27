@@ -32,14 +32,14 @@ class LoadStateSpec extends AnyFunSuite {
   }
 
   test("search failure, retry, empty result and cleared input have distinct displays") {
-    val failed = Search.update(Search.Msg.SearchResult("one", Left(new Exception("Search unavailable"))),
+    val failed = Search.update(Search.Msg.SearchResult(0, Left(new Exception("Search unavailable"))),
       Search.Model(query = "one", works = LoadState.Loading))._1
     assert(renderMarkup(Search.view(failed, _ => ())).contains("Search unavailable"))
     val retry = Search.update(Search.Msg.QueryInput("two"), failed)._1
     val retryHtml = renderMarkup(Search.view(retry, _ => ()))
     assert(retryHtml.contains("Loading..."))
     assert(!retryHtml.contains("Search unavailable"))
-    val empty = Search.update(Search.Msg.SearchResult("two", Right(Seq.empty)), retry)._1
+    val empty = Search.update(Search.Msg.SearchResult(retry.requestSerial, Right(Seq.empty)), retry)._1
     assert(empty.works == LoadState.Loaded(Seq.empty))
     assert(!renderMarkup(Search.view(empty, _ => ())).contains("Loading..."))
     val cleared = Search.update(Search.Msg.QueryInput(" "), retry)._1

@@ -20,6 +20,7 @@ object Search {
 
   case class Model(
       query: String = "",
+      requestSerial: Long = 0,
       works: LoadState[Seq[domain.Work]] = LoadState.Idle
   )
 
@@ -28,7 +29,7 @@ object Search {
   def init(query: String): (Model, Cmd[Msg]) =
     (
       Model(query = query, works = LoadState.Loading),
-      Server.searchWorks(query).map(SearchResult(query, _)).toCmd
+      Server.searchWorks(query).map(SearchResult(0, _)).toCmd
     )
 
   //
@@ -38,7 +39,7 @@ object Search {
   enum Msg {
     case QueryInput(query: String)
     case SearchResult(
-        query: String,
+        requestSerial: Long,
         result: Either[Throwable, Seq[domain.Work]]
     )
     case FoundItemClicked(workId: String)
@@ -51,39 +52,36 @@ object Search {
   def update(msg: Msg, model: Model): (Model, Cmd[Msg]) =
     msg match {
       case QueryInput(query) =>
+        val serial = model.requestSerial + 1
         if (query.isBlank())
           (
             model.copy(
               query = query,
+              requestSerial = serial,
               works = LoadState.Idle
             ),
             Cmd.exec(IO.fromEither(Route.search.url(())).flatMap(Browser.replaceUrl))
-              .debounce(DebounceKey, 1.millis) // Cancel previous search
+              .debounce(DebounceKey, 1.millis) // Cancel a pending debounce; response serials reject requests already in flight.
           )
         else
           (
-            model.copy(query = query, works = LoadState.Loading),
+            model.copy(query = query, requestSerial = serial, works = LoadState.Loading),
             Cmd.Batch(
               Cmd.exec(IO.fromEither(Route.searchWithQuery.url(query)).flatMap(Browser.replaceUrl)),
               Server.searchWorks(query)
-                .map(SearchResult(query, _)).toCmd
+                .map(SearchResult(serial, _)).toCmd
                 .debounce(DebounceKey, 500.millis)
             )
           )
 
-      case SearchResult(query, Right(works)) => {
-        println(s"Search results for '$query': ${works.size} works found")
-        (
-          model.copy(works = LoadState.Loaded(works)),
-          Cmd.none
-        )
-      }
+      case SearchResult(serial, _) if serial != model.requestSerial =>
+        (model, Cmd.none)
 
-      case SearchResult(query, Left(error)) =>
-        (
-          model.copy(works = LoadState.Failed(error)),
-          Cmd.none
-        )
+      case SearchResult(_, Right(works)) =>
+        (model.copy(works = LoadState.Loaded(works)), Cmd.none)
+
+      case SearchResult(_, Left(error)) =>
+        (model.copy(works = LoadState.Failed(error)), Cmd.none)
 
       case FoundItemClicked(workId) =>
         (model, Cmd.exec(IO.fromEither(Route.work.url(workId)).flatMap(url => Browser.pushUrl(url))))

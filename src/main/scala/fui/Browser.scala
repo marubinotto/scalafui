@@ -32,26 +32,19 @@ object Browser {
       dispatcher: Dispatcher[IO],
       onError: RuntimeError => IO[Unit] = RuntimeError.log
   ): IO[Unit] =
-    programResource(container, program, dispatcher, onError).use(
+    mount(container, program, dispatcher, onError).use(
       _.awaitTermination
     )
 
-  /** Low-level lifetime management; use run for automatic fatal-error
-    * monitoring.
+  /** Mount on acquisition and unmount on release. The caller owns the scope and
+    * fatal-error monitoring; a loop failure does not interrupt use. The
+    * returned Runtime exposes dispatch and awaitFailure.
     */
-  def runProgram[Model, Msg](
+  def mount[Model, Msg](
       container: Element,
       program: Program[Model, Msg],
       dispatcher: Dispatcher[IO],
       onError: RuntimeError => IO[Unit] = RuntimeError.log
-  ): Resource[IO, Unit] =
-    programResource(container, program, dispatcher, onError).void
-
-  private def programResource[Model, Msg](
-      container: Element,
-      program: Program[Model, Msg],
-      dispatcher: Dispatcher[IO],
-      onError: RuntimeError => IO[Unit]
   ): Resource[IO, Runtime[Model, Msg]] =
     Runtime.make(container, program, dispatcher, onError).flatMap { runtime =>
       Resource.make(IO {

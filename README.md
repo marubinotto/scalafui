@@ -424,7 +424,8 @@ Running an application acquires resources, including a React root, background
 work, and event listeners. `Runtime.make(container, program, dispatcher)` returns
 `Resource[IO, Runtime[Model, Msg]]`. The usual browser entry point,
 `Browser.run`, returns `IO[Unit]` and monitors fatal update-loop failures.
-The low-level `Browser.runProgram` remains available as `Resource[IO, Unit]`.
+`Browser.mount` returns `Resource[IO, Runtime[Model, Msg]]` for explicit lifetime
+management. It starts the application on acquisition and unmounts it on release.
 
 Keep the application's resource scope open for as long as the UI should run.
 For an application-defined `program` and DOM `container`, the startup pattern is:
@@ -439,6 +440,24 @@ val run: IO[Unit] =
     Browser.run(container, program, dispatcher)
   }
 ```
+
+For a custom lifetime, `mount` exposes the Runtime. Given an
+`applicationLifetime: IO[Unit]`, the caller can race it against fatal failure:
+
+```scala
+Dispatcher.parallel[IO].use { dispatcher =>
+  Browser.mount(container, program, dispatcher).use { runtime =>
+    IO.race(
+      applicationLifetime,
+      runtime.awaitFailure.flatMap(error => IO.raiseError[Unit](error))
+    ).void
+  }
+}
+```
+
+The returned Runtime also exposes `dispatch(msg)` for sending messages.
+`awaitFailure` only observes the cause; this example propagates it without
+calling the error reporter. Use `Browser.run` for built-in fatal-error reporting.
 
 The caller owns the Dispatcher and keeps it alive outside the application scope.
 Multiple Runtimes can share it; releasing one does not stop the others.
@@ -455,7 +474,7 @@ Image loading and geolocation do not currently abort their underlying operations
 
 #### Runtime errors
 
-`Runtime.make`, `Browser.runProgram`, and `Browser.run` accept an optional
+`Runtime.make`, `Browser.mount`, and `Browser.run` accept an optional
 `onError: RuntimeError => IO[Unit]`, defaulting to console logging. Unhandled
 command failures report `RuntimeError.Command`; failed subscriptions report
 `RuntimeError.Subscription(id, cause)`. Other work continues. Failed subscriptions
@@ -467,7 +486,7 @@ An exception in the update loop stops message acceptance immediately.
 resources. `Browser.run` waits for this failure, reports `RuntimeError.UpdateLoop`,
 and raises the original exception, releasing the application resources.
 Low-level resource users own their lifetime and fatal-error monitoring;
-`Browser.runProgram` does not automatically interrupt its caller's `use` body.
+`Browser.mount` does not automatically interrupt its caller's `use` body.
 Startup exceptions still fail resource acquisition directly.
 
 Reporters must terminate and must not cancel themselves. Synchronous exceptions
@@ -560,7 +579,7 @@ to Program, and handle that message in `update` by selecting the new page.
 See the [Multipage example](examples/multipage/src/main/scala/multipage/Main.scala)
 for a complete application with page-specific models and commands.
 
-With `Browser.run` or `Browser.runProgram`, `Browser.pushUrl(url)` adds a history entry without
+With `Browser.run` or `Browser.mount`, `Browser.pushUrl(url)` adds a history entry without
 loading a new document and notifies the URL change handler. Browser back/forward
 navigation also reaches that handler through `popstate`. `pushUrl(url, notify =
 false)` suppresses its notification; `replaceUrl(url)` replaces the current

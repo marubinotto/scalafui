@@ -9,6 +9,7 @@ import fui.*
 
 import multipage.domain
 import multipage.Server
+import multipage.LoadState
 
 object Work {
 
@@ -18,12 +19,8 @@ object Work {
 
   case class Model(
       workId: String,
-      work: Option[domain.Work] = None,
-      loadingWork: Boolean = true,
-      loadingWorkError: Option[Throwable] = None,
-      editions: Seq[domain.Edition] = Seq.empty,
-      loadingEditions: Boolean = true,
-      loadingEditionsError: Option[Throwable] = None
+      work: LoadState[domain.Work] = LoadState.Loading,
+      editions: LoadState[Seq[domain.Edition]] = LoadState.Loading
   )
 
   def init(workId: String): (Model, Cmd[Msg]) =
@@ -49,25 +46,16 @@ object Work {
   def update(msg: Msg, model: Model): (Model, Cmd[Msg]) =
     msg match {
       case WorkFetched(Right(work)) =>
-        (model.copy(loadingWork = false, work = Some(work)), Cmd.none)
+        (model.copy(work = LoadState.Loaded(work)), Cmd.none)
 
       case WorkFetched(Left(error)) =>
-        (
-          model.copy(loadingWork = false, loadingWorkError = Some(error)),
-          Cmd.none
-        )
+        (model.copy(work = LoadState.Failed(error)), Cmd.none)
 
       case EditionsFetched(Right(editions)) =>
-        (model.copy(loadingEditions = false, editions = editions), Cmd.none)
+        (model.copy(editions = LoadState.Loaded(editions)), Cmd.none)
 
       case EditionsFetched(Left(error)) =>
-        (
-          model.copy(
-            loadingEditions = false,
-            loadingEditionsError = Some(error)
-          ),
-          Cmd.none
-        )
+        (model.copy(editions = LoadState.Failed(error)), Cmd.none)
     }
 
   //
@@ -76,25 +64,23 @@ object Work {
 
   def view(model: Model, @scala.annotation.unused dispatch: Msg => Unit): ReactElement =
     div(className := "work-container")(
-      model.loadingWorkError.map(error =>
-        div(className := "error")(error.toString())
-      ),
-      model.work
-        .map(viewWork(_))
-        .getOrElse(
-          div(className := "loading")("Loading the work description...")
-        ),
+      model.work match {
+        case LoadState.Loaded(work) => viewWork(work)
+        case LoadState.Failed(error) => div(className := "error")(error.toString())
+        case LoadState.Loading => div(className := "loading")("Loading the work description...")
+        case LoadState.Idle => div()
+      },
       div(className := "editions-container")(
         div(className := "header")("Editions"),
-        model.loadingEditionsError.map(error =>
-          div(className := "error")(error.toString())
-        ),
-        div(className := "editions")(
-          if (model.loadingEditions)
-            div(className := "loading")("Loading editions...")
-          else
-            model.editions.map(viewEdition(_))
-        )
+        model.editions match {
+          case LoadState.Loaded(editions) =>
+            div(className := "editions")(editions.map(viewEdition(_)))
+          case LoadState.Failed(error) =>
+            div(className := "error")(error.toString())
+          case LoadState.Loading =>
+            div(className := "editions")(div(className := "loading")("Loading editions..."))
+          case LoadState.Idle => div()
+        }
       )
     )
 

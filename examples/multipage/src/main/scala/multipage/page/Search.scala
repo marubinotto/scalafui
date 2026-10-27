@@ -9,6 +9,7 @@ import cats.effect.IO
 
 import multipage.domain
 import multipage.Server
+import multipage.LoadState
 import multipage.Main.Route
 
 object Search {
@@ -19,16 +20,14 @@ object Search {
 
   case class Model(
       query: String = "",
-      loading: Boolean = false,
-      loadingError: Option[Throwable] = None,
-      works: Seq[domain.Work] = Seq.empty
+      works: LoadState[Seq[domain.Work]] = LoadState.Idle
   )
 
   def init(): (Model, Cmd[Msg]) = (Model(), Cmd.none)
 
   def init(query: String): (Model, Cmd[Msg]) =
     (
-      Model().copy(query = query, loading = true),
+      Model(query = query, works = LoadState.Loading),
       Server.searchWorks(query).map(SearchResult(query, _)).toCmd
     )
 
@@ -56,16 +55,14 @@ object Search {
           (
             model.copy(
               query = query,
-              loading = false,
-              loadingError = None,
-              works = Seq.empty
+              works = LoadState.Idle
             ),
             Cmd.exec(IO.fromEither(Route.search.url(())).flatMap(Browser.replaceUrl))
               .debounce(DebounceKey, 1.millis) // Cancel previous search
           )
         else
           (
-            model.copy(query = query, loading = true, loadingError = None),
+            model.copy(query = query, works = LoadState.Loading),
             Cmd.Batch(
               Cmd.exec(IO.fromEither(Route.searchWithQuery.url(query)).flatMap(Browser.replaceUrl)),
               Server.searchWorks(query)
@@ -77,14 +74,14 @@ object Search {
       case SearchResult(query, Right(works)) => {
         println(s"Search results for '$query': ${works.size} works found")
         (
-          model.copy(loading = false, loadingError = None, works = works),
+          model.copy(works = LoadState.Loaded(works)),
           Cmd.none
         )
       }
 
       case SearchResult(query, Left(error)) =>
         (
-          model.copy(loading = false, loadingError = Some(error)),
+          model.copy(works = LoadState.Failed(error)),
           Cmd.none
         )
 
@@ -107,27 +104,27 @@ object Search {
           onChange := ((e) => dispatch(QueryInput(e.target.value)))
         )
       ),
-      model.loadingError.map(error =>
-        div(className := "error")(error.toString())
-      ),
-      if (model.loading)
-        div(className := "loading")("Loading...")
-      else
-        div(className := "search-results")(
-          model.works.map(work =>
-            div(className := "found-item", key := work.id.toString())(
-              a(
-                className := "title",
-                href := "#",
-                onClick := ((e) => {
-                  e.preventDefault()
-                  dispatch(FoundItemClicked(work.id))
-                })
-              )(work.title),
-              div(className := "author")(work.authors.map(_.mkString(", ")))
+      model.works match {
+        case LoadState.Failed(error) => div(className := "error")(error.toString())
+        case LoadState.Loading => div(className := "loading")("Loading...")
+        case LoadState.Idle => div(className := "search-results")()
+        case LoadState.Loaded(works) =>
+          div(className := "search-results")(
+            works.map(work =>
+              div(className := "found-item", key := work.id.toString())(
+                a(
+                  className := "title",
+                  href := "#",
+                  onClick := ((e) => {
+                    e.preventDefault()
+                    dispatch(FoundItemClicked(work.id))
+                  })
+                )(work.title),
+                div(className := "author")(work.authors.map(_.mkString(", ")))
+              )
             )
           )
-        )
+      }
     )
   }
 }

@@ -13,7 +13,6 @@ import slinky.web.html.*
 import fui.router.*
 
 import cats.effect.IO
-import cats.effect.std.Dispatcher
 import cats.effect.unsafe.implicits.global
 
 import fui.*
@@ -144,23 +143,20 @@ object Main {
     run.unsafeRunAndForget()
 
   def run: IO[Unit] =
-    Dispatcher.parallel[IO].use { dispatcher =>
-      IO {
-        if (LinkingInfo.developmentMode) {
-          hot.initialize()
-        }
-      } *> {
-        Browser.run(
-          dom.document.getElementById("app"),
-          Program(
-            init,
-            view,
-            update,
-            (_: Model) => Sub.Empty,
-            Some(UrlChanged(_))
-          ),
-          dispatcher
-        )
+    IO {
+      if (LinkingInfo.developmentMode) {
+        hot.initialize()
       }
+    } *> {
+      Browser.run(
+        dom.document.getElementById("app"),
+        Program(
+          init,
+          view,
+          update,
+          (_: Model) => Sub.Empty,
+          Some(UrlChanged(_))
+        )
+      )
     }
 }

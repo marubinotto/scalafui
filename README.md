@@ -21,7 +21,6 @@ import slinky.hot
 import slinky.web.html._
 
 import cats.effect.IO
-import cats.effect.std.Dispatcher
 import cats.effect.unsafe.implicits.global
 
 import fui._
@@ -90,18 +89,15 @@ object Main {
     run.unsafeRunAndForget()
 
   def run: IO[Unit] =
-    Dispatcher.parallel[IO].use { dispatcher =>
-      IO {
-        if (LinkingInfo.developmentMode) {
-          hot.initialize()
-        }
-      } *> {
-        Browser.run(
-          dom.document.getElementById("app"),
-          Program(init, view, update),
-          dispatcher
-        )
+    IO {
+      if (LinkingInfo.developmentMode) {
+        hot.initialize()
       }
+    } *> {
+      Browser.run(
+        dom.document.getElementById("app"),
+        Program(init, view, update)
+      )
     }
 }
 ```
@@ -421,7 +417,7 @@ Scalafui uses React 18 and creates one React root per Runtime. Keep `react` and
 #### Application lifetime
 
 Running an application acquires resources, including a React root, background
-work, and event listeners. `Runtime.make(container, program, dispatcher)` returns
+work, and event listeners. `Runtime.make(container, program)` returns
 `Resource[IO, Runtime[Model, Msg]]`. The usual browser entry point,
 `Browser.run`, returns `IO[Unit]` and monitors fatal update-loop failures.
 `Browser.mount` returns `Resource[IO, Runtime[Model, Msg]]` for explicit lifetime
@@ -432,35 +428,27 @@ For an application-defined `program` and DOM `container`, the startup pattern is
 
 ```scala
 import cats.effect.IO
-import cats.effect.std.Dispatcher
 import fui.*
 
 val run: IO[Unit] =
-  Dispatcher.parallel[IO].use { dispatcher =>
-    Browser.run(container, program, dispatcher)
-  }
+  Browser.run(container, program)
 ```
 
 For a custom lifetime, `mount` exposes the Runtime. Given an
 `applicationLifetime: IO[Unit]`, the caller can race it against fatal failure:
 
 ```scala
-Dispatcher.parallel[IO].use { dispatcher =>
-  Browser.mount(container, program, dispatcher).use { runtime =>
-    IO.race(
-      applicationLifetime,
-      runtime.awaitFailure.flatMap(error => IO.raiseError[Unit](error))
-    ).void
-  }
+Browser.mount(container, program).use { runtime =>
+  IO.race(
+    applicationLifetime,
+    runtime.awaitFailure.flatMap(error => IO.raiseError[Unit](error))
+  ).void
 }
 ```
 
 The returned Runtime also exposes `dispatch(msg)` for sending messages.
 `awaitFailure` only observes the cause; this example propagates it without
 calling the error reporter. Use `Browser.run` for built-in fatal-error reporting.
-
-The caller owns the Dispatcher and keeps it alive outside the application scope.
-Multiple Runtimes can share it; releasing one does not stop the others.
 
 Leaving the resource scope stops message processing, cancels commands and
 subscriptions while waiting for their finalizers, clears debounce timers,

@@ -170,13 +170,13 @@ object Runtime {
   def make[Model, Msg](
       container: Element,
       program: Program[Model, Msg],
-      dispatcher: Dispatcher[IO],
       onError: RuntimeError => IO[Unit] = RuntimeError.log
   ): Resource[IO, Runtime[Model, Msg]] =
     for {
       root <- Resource.make(IO(ReactDOMClient.createRoot(container)))(root =>
         IO(root.unmount())
       )
+      dispatcher <- Dispatcher.sequential[IO]
       supervisor <- Supervisor[IO](await = false)
       debounceLock <- Resource.eval(Mutex[IO])
       queue <- Resource.eval(Queue.unbounded[IO, Msg])

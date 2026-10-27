@@ -8,7 +8,6 @@ import org.scalajs.dom
 import org.scalajs.dom.{Element, URL}
 
 import cats.effect.{IO, Resource}
-import cats.effect.std.Dispatcher
 import cats.syntax.functor.*
 
 import io.circe.*
@@ -29,10 +28,9 @@ object Browser {
   def run[Model, Msg](
       container: Element,
       program: Program[Model, Msg],
-      dispatcher: Dispatcher[IO],
       onError: RuntimeError => IO[Unit] = RuntimeError.log
   ): IO[Unit] =
-    mount(container, program, dispatcher, onError).use(
+    mount(container, program, onError).use(
       _.awaitTermination
     )
 
@@ -43,10 +41,9 @@ object Browser {
   def mount[Model, Msg](
       container: Element,
       program: Program[Model, Msg],
-      dispatcher: Dispatcher[IO],
       onError: RuntimeError => IO[Unit] = RuntimeError.log
   ): Resource[IO, Runtime[Model, Msg]] =
-    Runtime.make(container, program, dispatcher, onError).flatMap { runtime =>
+    Runtime.make(container, program, onError).flatMap { runtime =>
       Resource.make(IO {
         val listener: URL => Unit = runtime.onPushUrl
         listenersOnPushUrl = listener :: listenersOnPushUrl

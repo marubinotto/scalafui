@@ -3,7 +3,6 @@ package fuidungeon
 import scala.scalajs.LinkingInfo
 import scala.concurrent.duration.DurationInt
 import cats.effect.IO
-import cats.effect.std.Dispatcher
 import cats.effect.unsafe.implicits.global
 import org.scalajs.dom
 import org.scalajs.dom.URL
@@ -218,8 +217,7 @@ object Main {
   }
 
   def main(args: Array[String]): Unit = run.unsafeRunAndForget()
-  def run: IO[Unit] = Dispatcher.parallel[IO].use { dispatcher =>
+  def run: IO[Unit] =
     IO { if (LinkingInfo.developmentMode) hot.initialize() } *>
-      Browser.run(dom.document.getElementById("app"), Program(init, view, update, subscriptions), dispatcher)
-  }
+      Browser.run(dom.document.getElementById("app"), Program(init, view, update, subscriptions))
 }

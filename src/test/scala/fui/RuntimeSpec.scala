@@ -124,8 +124,8 @@ class RuntimeSpec extends AsyncFunSuite {
         started <- Resource.eval(cats.effect.std.Queue.unbounded[IO, Int])
         stopped <- Resource.eval(cats.effect.std.Queue.unbounded[IO, Unit])
         updated <- Resource.eval(cats.effect.std.Queue.unbounded[IO, Unit])
-        sub = Sub.fromCallback[Boolean]("external") { _ =>
-          starts.updateAndGet(_ + 1).flatMap(started.offer).as(stopped.offer(()))
+        sub = Sub.fromResource[Boolean]("external") { _ =>
+          Resource.make(starts.updateAndGet(_ + 1).flatMap(started.offer))(_ => stopped.offer(()))
         }
         runtime <- Runtime.make(dom.document.getElementById("app"), Program[Boolean, Boolean](
           _ => (true, Cmd.none),
@@ -159,16 +159,16 @@ class RuntimeSpec extends AsyncFunSuite {
         secondStarted <- Deferred[IO, Unit]
         cleanupStarted <- Deferred[IO, Unit]
         allowCleanup <- Deferred[IO, Unit]
-        sub = Sub.fromCallback[Boolean]("external") { _ =>
-          starts.updateAndGet(_ + 1).flatMap { generation =>
+        sub = Sub.fromResource[Boolean]("external") { _ =>
+          Resource.make(starts.updateAndGet(_ + 1).flatMap { generation =>
             (events.update(_ :+ s"start-$generation") *>
               (if (generation == 1) firstStarted else secondStarted).complete(()))
-              .as(
-                events.update(_ :+ s"cleanup-start-$generation") *>
-                  cleanupStarted.complete(()) *> allowCleanup.get *>
-                  events.update(_ :+ s"cleanup-end-$generation")
-              )
-          }
+              .as(generation)
+          }) { generation =>
+            events.update(_ :+ s"cleanup-start-$generation") *>
+              cleanupStarted.complete(()) *> allowCleanup.get *>
+              events.update(_ :+ s"cleanup-end-$generation")
+          }.void
         }
         _ <- Runtime.make(dom.document.getElementById("app"), Program[Boolean, Boolean](
           _ => (true, Cmd.none), (model, _) => div(model.toString),
@@ -233,8 +233,10 @@ class RuntimeSpec extends AsyncFunSuite {
           cleanups <- cats.effect.Ref.of[IO, List[String]](Nil)
           command = Cmd[Unit]((commandStarted.complete(()) *> IO.never[Option[Unit]])
             .guarantee(IO.sleep(10.millis) *> cleanups.update("command" :: _)))
-          sub = Sub.fromCallback[Unit]("cleanup") { _ =>
-            subStarted.complete(()).as(IO.sleep(10.millis) *> cleanups.update("sub" :: _))
+          sub = Sub.fromResource[Unit]("cleanup") { _ =>
+            Resource.make(subStarted.complete(()))(
+              _ => IO.sleep(10.millis) *> cleanups.update("sub" :: _)
+            ).void
           }
           resource = Runtime.make(dom.document.getElementById("app"), Program[Int, Unit](
             _ => (0, command), (model, _) => div(model.toString),
@@ -408,7 +410,9 @@ class RuntimeSpec extends AsyncFunSuite {
         result <- Runtime.make(dom.document.getElementById("app"), Program[Int, Unit](
           _ => (0, Cmd.none), (_, _) => div("mounted"),
           (_, model) => (model, Cmd.none),
-          _ => Sub.fromCallback[Unit]("cleanup")(_ => started.complete(()).as(cleaned.complete(()).void)),
+          _ => Sub.fromResource[Unit]("cleanup")(_ =>
+            Resource.make(started.complete(()))(_ => cleaned.complete(()).void).void
+          ),
           Some(_ => ())
         ), dispatcher).use { _ =>
           started.get *> IO.sleep(30.millis) *> IO {

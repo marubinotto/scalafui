@@ -2,7 +2,8 @@ package fui
 
 import scala.concurrent.duration.*
 import scala.scalajs.js
-import cats.effect.{Deferred, IO, Ref}
+import cats.effect.{Deferred, IO, Ref, Resource}
+import cats.syntax.all.*
 import cats.effect.unsafe.implicits.global
 import fs2.Stream
 import org.scalajs.dom
@@ -14,6 +15,85 @@ class SubSpec extends AsyncFunSuite {
 
   private def stream[A](sub: Sub[A]): Stream[IO, A] = Sub.toMap(sub).values.head
 
+  test("resource registration is lazy and retains emissions during acquisition through map") {
+    (for {
+      starts <- Ref.of[IO, Int](0)
+      cleanups <- Ref.of[IO, Int](0)
+      sub = Sub.fromResource[Int]("resource") { emit =>
+        Resource.make(starts.update(_ + 1) *> IO { emit(1); emit(2) })(
+          _ => cleanups.update(_ + 1)
+        )
+      }
+      before <- starts.get
+      values <- stream(sub.map(_ * 10)).take(2).compile.toList
+      after <- starts.get
+      released <- cleanups.get
+    } yield {
+      assert(before == 0 && after == 1)
+      assert(values == List(10, 20))
+      assert(released == 1)
+    }).timeout(2.seconds).unsafeToFuture()
+  }
+
+  test("resource cleanup runs once on consumer failure and cancellation") {
+    List(false, true).traverse_ { cancel =>
+      for {
+        ready <- Deferred[IO, Unit]
+        cleanups <- Ref.of[IO, Int](0)
+        failure = new RuntimeException("consumer failed")
+        sub = Sub.fromResource[Int]("resource") { emit =>
+          Resource.make(IO(emit(1)))(_ => cleanups.update(_ + 1))
+        }
+        consume = stream(sub).evalMap { _ =>
+          ready.complete(()) *> (if (cancel) IO.never[Unit] else IO.raiseError[Unit](failure))
+        }.compile.drain
+        _ <- if (cancel)
+          Resource.make(consume.start)(_.cancel).use(fiber => ready.get *> fiber.cancel)
+        else consume.attempt.flatMap(result => IO(assert(result == Left(failure))))
+        released <- cleanups.get
+        _ <- IO(assert(released == 1))
+      } yield ()
+    }.as(succeed).timeout(2.seconds).unsafeToFuture()
+  }
+
+  test("failed second resource acquisition releases the first and preserves the error") {
+    (for {
+      cleanups <- Ref.of[IO, Int](0)
+      failure = new RuntimeException("second acquisition failed")
+      sub = Sub.fromResource[Int]("partial") { _ =>
+        for {
+          _ <- Resource.make(IO.unit)(_ => cleanups.update(_ + 1))
+          _ <- Resource.eval(IO.raiseError[Unit](failure))
+        } yield ()
+      }
+      result <- stream(sub).compile.drain.attempt
+      released <- cleanups.get
+    } yield {
+      assert(result == Left(failure))
+      assert(released == 1)
+    }).timeout(2.seconds).unsafeToFuture()
+  }
+
+  test("resource finalizers run in reverse order even when one fails") {
+    (for {
+      releases <- Ref.of[IO, List[String]](Nil)
+      failure = new RuntimeException("second cleanup failed")
+      sub = Sub.fromResource[Int]("finalizers") { emit =>
+        for {
+          _ <- Resource.make(IO.unit)(_ => releases.update(_ :+ "first"))
+          _ <- Resource.make(IO(emit(1)))(_ =>
+            releases.update(_ :+ "second") *> IO.raiseError[Unit](failure)
+          )
+        } yield ()
+      }
+      result <- stream(sub).take(1).compile.drain.attempt
+      order <- releases.get
+    } yield {
+      assert(result == Left(failure))
+      assert(order == List("second", "first"))
+    }).timeout(2.seconds).unsafeToFuture()
+  }
+
   test("every reads epoch milliseconds from the effect clock at each virtual tick") {
     cats.effect.testkit.TestControl.executeEmbed {
       stream(Sub.every(1.second, "clock")).take(3).compile.toList.map { ticks =>
@@ -22,27 +102,15 @@ class SubSpec extends AsyncFunSuite {
     }.unsafeToFuture()
   }
 
-  test("callback emissions during registration are retained and cleanup runs once") {
-    (for {
-      cleanups <- Ref.of[IO, Int](0)
-      sub = Sub.fromCallback[Int]("callback") { emit =>
-        IO { emit(1); emit(2) }.as(cleanups.update(_ + 1))
-      }
-      result <- stream(sub.map(_ * 10)).take(2).compile.toList.timeout(2.seconds)
-      count <- cleanups.get
-    } yield {
-      assert(result == List(10, 20))
-      assert(count == 1)
-    }).unsafeToFuture()
-  }
-
   test("cancellation during asynchronous registration waits for cleanup") {
     (for {
       started <- Deferred[IO, Unit]
       acquired <- Deferred[IO, Unit]
       cleanups <- Ref.of[IO, Int](0)
-      sub = Sub.fromCallback[Int]("async") { _ =>
-        (started.complete(()) *> IO.sleep(30.millis) *> acquired.complete(())).as(cleanups.update(_ + 1))
+      sub = Sub.fromResource[Int]("async") { _ =>
+        Resource.make(started.complete(()) *> IO.sleep(30.millis) *> acquired.complete(()))(
+          _ => cleanups.update(_ + 1)
+        ).void
       }
       fiber <- stream(sub).compile.drain.start
       _ <- started.get
@@ -57,7 +125,7 @@ class SubSpec extends AsyncFunSuite {
 
   test("registration failure reaches the stream consumer") {
     val failure = new RuntimeException("registration failed")
-    stream(Sub.fromCallback[Int]("failed")(_ => IO.raiseError(failure)))
+    stream(Sub.fromResource[Int]("failed")(_ => Resource.eval(IO.raiseError[Unit](failure))))
       .compile.drain.attempt.timeout(2.seconds)
       .map(result => assert(result == Left(failure))).unsafeToFuture()
   }

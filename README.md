@@ -349,19 +349,43 @@ def subscriptions(model: Model): Sub[Tick] =
 DOM events. Combine sources with `combine`, or use `Sub.Impl(id, stream)` for an
 `fs2.Stream[IO, Msg]`.
 
-For callback APIs, `Sub.fromCallback` takes a registration IO that returns a
-cleanup IO. This adapter accepts an API that returns an unregister function:
+For callback APIs, `Sub.fromResource` takes a registration function returning a
+`Resource[IO, Unit]`. Registration starts when the subscription stream runs;
+events emitted during registration are retained. The resource is released when
+the stream ends, fails, or is canceled, before its callback Dispatcher is released.
+Compose resources to safely register multiple sources:
 
 ```scala
-import cats.effect.IO
+import cats.effect.{IO, Resource}
+import fui.*
+
+def externalSources[Msg](
+    registerFirst: (Msg => Unit) => (() => Unit),
+    registerSecond: (Msg => Unit) => (() => Unit)
+): Sub[Msg] =
+  Sub.fromResource[Msg]("external-sources") { emit =>
+    for {
+      _ <- Resource.make(IO(registerFirst(emit)))(unregister => IO(unregister()))
+      _ <- Resource.make(IO(registerSecond(emit)))(unregister => IO(unregister()))
+    } yield ()
+  }
+```
+
+If the second registration fails, the first is released. On normal teardown,
+resources are released in reverse acquisition order, even if a finalizer fails.
+Each acquisition must still clean up any partial work it performs before failing.
+
+A single callback API returning an unregister function can be adapted with
+`Resource.make`. Its acquisition is uncancelable: cancellation during registration
+waits for acquisition to finish and then runs cleanup.
+
+```scala
+import cats.effect.{IO, Resource}
 import fui.*
 
 def externalEvents[Msg](register: (Msg => Unit) => (() => Unit)): Sub[Msg] =
-  Sub.fromCallback[Msg]("external-events") { emit =>
-    IO {
-      val unregister = register(emit)
-      IO(unregister())
-    }
+  Sub.fromResource[Msg]("external-events") { emit =>
+    Resource.make(IO(register(emit)))(unregister => IO(unregister())).map(_ => ())
   }
 ```
 
@@ -369,8 +393,7 @@ Runtime compares subscription IDs after each update. New IDs start streams;
 removed IDs cancel streams and run their cleanup. Keeping an ID keeps its
 existing stream, even if `subscriptions` constructs a different stream for that
 ID. To restart a completed or stopped subscription, remove its ID in one update
-before adding it again. Registration failures must clean up any partially
-acquired external resources themselves.
+before adding it again.
 
 ### Runtime
 

@@ -445,9 +445,12 @@ Multiple Runtimes can share it; releasing one does not stop the others.
 Leaving the resource scope stops message processing, cancels commands and
 subscriptions while waiting for their finalizers, clears debounce timers,
 removes URL listeners, and unmounts React. Partial startup failures also release
-acquired resources. Dispatch after release is ignored. Cancellation of an
-underlying browser operation, such as fetch, depends on its adapter; canceling
-the command does not necessarily abort that operation.
+acquired resources. Dispatch after release is ignored. Cancellation of `ajaxGetJson`, `ajaxGet`, and `ajaxHead` aborts the underlying
+fetch request, including pending response body reads for GET. Cancellation of
+`encodeAsBase64` aborts its FileReader and removes its event handlers. These
+operations remain canceled rather than emitting a `Left` result. Each execution
+owns its cancellation resources; canceling one does not affect another.
+Image loading and geolocation do not currently abort their underlying operations.
 
 ### Browser
 

@@ -66,62 +66,48 @@ object Browser {
       dom.window.location.reload()
     }
 
-  def ajaxGetJson(url: String): IO[Either[Throwable, Json]] =
+  // The cancel token covers both the request and consumption of its body.
+  private def fetchResult[A](url: String, requestMethod: dom.HttpMethod)(
+      consume: dom.Response => Future[A]
+  ): IO[Either[Throwable, A]] =
     IO.async { cb =>
       IO {
-        dom.fetch(url).flatMap(_.text()).onComplete {
-          // Keep network and decoding failures as values for the caller.
-          case Success(text) => {
-            val parseResult = parse(text)
-            cb(Right(parseResult))
-          }
-          case Failure(t) => {
-            cb(Right(Left(t)))
-          }
+        val controller = new dom.AbortController()
+        var canceled = false
+        dom.fetch(url, new dom.RequestInit {
+          method = requestMethod
+          signal = controller.signal
+        }).onComplete {
+          case Success(response) if !canceled =>
+            scala.util.Try(consume(response)) match {
+              case Success(result) => result.onComplete { outcome =>
+                if (!canceled) cb(Right(outcome.toEither))
+              }
+              case Failure(error) => cb(Right(Left(error)))
+            }
+          case Failure(error) if !canceled => cb(Right(Left(error)))
+          case _ => ()
         }
-        None // no finalizer on cancellation
+        Some(IO {
+          canceled = true
+          controller.abort()
+        })
       }
     }
+
+  def ajaxGetJson(url: String): IO[Either[Throwable, Json]] =
+    fetchResult(url, dom.HttpMethod.GET)(_.text().toFuture)
+      .map(_.flatMap(parse(_)))
 
   def ajaxGet[Result](
       url: String,
       decoder: Decoder[Result]
   ): IO[Either[Throwable, Result]] =
-    IO.async { cb =>
-      IO {
-        dom.fetch(url).flatMap(_.text()).onComplete {
-          // Keep network and decoding failures as values for the caller.
-          case Success(text) => {
-            val decoded = decode[Result](text)(using decoder)
-            cb(Right(decoded))
-          }
-          case Failure(t) => {
-            cb(Right(Left(t)))
-          }
-        }
-        None // no finalizer on cancellation
-      }
-    }
+    fetchResult(url, dom.HttpMethod.GET)(_.text().toFuture)
+      .map(_.flatMap(text => decode[Result](text)(using decoder)))
 
   def ajaxHead(url: String): IO[Either[Throwable, dom.Response]] =
-    IO.async { cb =>
-      IO {
-        dom.fetch(
-          url,
-          new dom.RequestInit {
-            method = dom.HttpMethod.HEAD
-          }
-        ).onComplete {
-          case Success(response) => {
-            cb(Right(Right(response)))
-          }
-          case Failure(t) => {
-            cb(Right(Left(t)))
-          }
-        }
-        None // no finalizer on cancellation
-      }
-    }
+    fetchResult(url, dom.HttpMethod.HEAD)(Future.successful)
 
   def setHtmlTheme(theme: String): IO[Unit] =
     IO {
@@ -145,25 +131,28 @@ object Browser {
       blob: dom.Blob,
       removePadding: Boolean = false
   ): IO[Either[dom.ProgressEvent, String]] =
-    IO.async { cb =>
-      IO {
-        val reader = new dom.FileReader()
-        reader.onload = _ => {
-          val url = reader.result.asInstanceOf[String]
-          val base64 = url.substring(url.indexOf(',') + 1)
-          if (removePadding) {
-            val base64WithoutPadding = base64.replaceAll("=+$", "")
-            cb(Right(Right(base64WithoutPadding)))
-          } else {
-            cb(Right(Right(base64)))
+    Resource.make(IO(new dom.FileReader()))(reader => IO {
+      reader.onload = null
+      reader.onerror = null
+    }).use { reader =>
+      IO.async { cb =>
+        IO {
+          var canceled = false
+          reader.onload = _ => if (!canceled) {
+            val url = reader.result.asInstanceOf[String]
+            val base64 = url.substring(url.indexOf(',') + 1)
+            cb(Right(Right(if (removePadding) base64.replaceAll("=+$", "") else base64)))
           }
+          reader.onerror = (e: dom.ProgressEvent) =>
+            if (!canceled) cb(Right(Left(e)))
+          reader.readAsDataURL(blob)
+          Some(IO {
+            canceled = true
+            reader.onload = null
+            reader.onerror = null
+            reader.abort()
+          })
         }
-        reader.onerror = (e: dom.ProgressEvent) => {
-          cb(Right(Left(e)))
-        }
-        reader.readAsDataURL(blob)
-
-        None // no finalizer on cancellation
       }
     }
 

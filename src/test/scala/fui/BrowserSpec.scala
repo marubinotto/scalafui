@@ -1,7 +1,10 @@
 package fui
 
 import scala.scalajs.js
-import cats.effect.{IO, Resource}
+import scala.scalajs.js.JSConverters.*
+import cats.effect.{Deferred, IO, Outcome, Resource}
+import cats.syntax.all.*
+import scala.concurrent.Promise
 import org.scalajs.dom
 import io.circe.Decoder
 import scala.concurrent.duration.*
@@ -215,6 +218,169 @@ class BrowserSpec extends AsyncFunSuite with org.scalatest.BeforeAndAfterAll {
         assert(failed.left.toOption.exists(_.isInstanceOf[IllegalArgumentException]))
       }
     }.timeout(2.seconds).unsafeToFuture()
+  }
+
+  test("fetch cancellation aborts each API and ignores late responses") {
+    val operations = List(
+      Browser.ajaxGetJson("/value").void,
+      Browser.ajaxGet("/value", Decoder.decodeInt).void,
+      Browser.ajaxHead("/value").void
+    )
+    operations.traverse_ { operation =>
+      for {
+        started <- Deferred[IO, dom.AbortSignal]
+        emitted <- cats.effect.Ref.of[IO, Boolean](false)
+        response = Promise[dom.Response]()
+        bodyReads = new Array[Int](1)
+        _ <- IO {
+          js.Dynamic.global.globalThis.fetch = ((_: String, init: js.Dynamic) => {
+            started.complete(init.signal.asInstanceOf[dom.AbortSignal]).unsafeRunAndForget()
+            response.future.toJSPromise
+          }): js.Function2[String, js.Dynamic, js.Promise[dom.Response]]
+        }
+        fiber <- (operation *> emitted.set(true)).start
+        signal <- started.get
+        _ <- fiber.cancel
+        _ <- fiber.cancel
+        outcome <- fiber.join
+        _ <- IO {
+          assert(signal.aborted)
+          assert(outcome == Outcome.Canceled())
+          response.success(js.Dynamic.literal(text = (() => {
+            bodyReads(0) += 1
+            js.Promise.resolve("42")
+          }): js.Function0[js.Promise[String]]).asInstanceOf[dom.Response])
+        }
+        // Queue a callback after the adapter's callback on the same Future.
+        _ <- IO.fromFuture(IO(response.future.map(_ => ())))
+        _ <- IO.cede
+        value <- emitted.get
+        _ <- IO(assert(!value && bodyReads(0) == 0))
+      } yield ()
+    }.as(succeed).timeout(3.seconds).unsafeToFuture()
+  }
+
+  test("GET cancellation also aborts pending body consumption") {
+    List(Browser.ajaxGetJson("/value").void,
+      Browser.ajaxGet("/value", Decoder.decodeInt).void).traverse_ { operation =>
+      for {
+        reading <- Deferred[IO, dom.AbortSignal]
+        body = Promise[String]()
+        emitted <- cats.effect.Ref.of[IO, Boolean](false)
+        _ <- IO {
+          js.Dynamic.global.globalThis.fetch = ((_: String, init: js.Dynamic) => {
+            js.Promise.resolve(js.Dynamic.literal(text = (() => {
+              reading.complete(init.signal.asInstanceOf[dom.AbortSignal]).unsafeRunAndForget()
+              body.future.toJSPromise
+            }): js.Function0[js.Promise[String]]))
+          }): js.Function2[String, js.Dynamic, js.Promise[js.Dynamic]]
+        }
+        fiber <- (operation *> emitted.set(true)).start
+        signal <- reading.get
+        _ <- fiber.cancel
+        outcome <- fiber.join
+        _ <- IO { assert(signal.aborted); body.success("42") }
+        _ <- IO.fromFuture(IO(body.future.map(_ => ())))
+        _ <- IO.cede
+        value <- emitted.get
+        _ <- IO(assert(outcome == Outcome.Canceled() && !value))
+      } yield ()
+    }.as(succeed).timeout(3.seconds).unsafeToFuture()
+  }
+
+  test("repeated and concurrent fetch executions own independent controllers") {
+    (for {
+      requests <- cats.effect.std.Queue.unbounded[IO, (dom.AbortSignal, Promise[dom.Response])]
+      _ <- IO {
+        js.Dynamic.global.globalThis.fetch = ((_: String, init: js.Dynamic) => {
+          val response = Promise[dom.Response]()
+          requests.offer((init.signal.asInstanceOf[dom.AbortSignal], response)).unsafeRunAndForget()
+          response.future.toJSPromise
+        }): js.Function2[String, js.Dynamic, js.Promise[dom.Response]]
+      }
+      operation = Browser.ajaxHead("/value")
+      first <- operation.start
+      a <- requests.take
+      second <- operation.start
+      b <- requests.take
+      _ <- first.cancel
+      _ <- IO {
+        assert(a._1.aborted && !b._1.aborted && a._1 != b._1)
+        b._2.success(js.Dynamic.literal(status = 200).asInstanceOf[dom.Response])
+      }
+      result <- second.joinWithNever
+      third <- operation.start
+      c <- requests.take
+      _ <- IO {
+        assert(result.toOption.get.status == 200 && !b._1.aborted)
+        assert(!c._1.aborted && c._1 != b._1 && c._1 != a._1)
+        c._2.success(js.Dynamic.literal(status = 201).asInstanceOf[dom.Response])
+      }
+      repeated <- third.joinWithNever
+    } yield assert(repeated.toOption.get.status == 201 && !c._1.aborted)).timeout(3.seconds).unsafeToFuture()
+  }
+
+  test("FileReader cancellation aborts once, detaches handlers and ignores late notifications") {
+    browser.use { env =>
+      for {
+        started <- Deferred[IO, js.Dynamic]
+        emitted <- cats.effect.Ref.of[IO, Boolean](false)
+        aborts = new Array[Int](1)
+        _ <- IO {
+          val prototype = env._1.window.FileReader.prototype
+          prototype.readAsDataURL = ((reader: js.Dynamic, _: js.Any) => {
+            started.complete(reader).unsafeRunAndForget()
+          }): js.ThisFunction1[js.Dynamic, js.Any, Unit]
+          prototype.abort = ((reader: js.Dynamic) => {
+            assert(reader.onload == null && reader.onerror == null)
+            aborts(0) += 1
+          }): js.ThisFunction0[js.Dynamic, Unit]
+        }
+        fiber <- (Browser.encodeAsBase64(new dom.Blob(js.Array("a"))) *>
+          emitted.set(true)).start
+        reader <- started.get
+        lateError <- IO(reader.onerror.asInstanceOf[js.Function1[dom.ProgressEvent, Unit]])
+        _ <- fiber.cancel
+        _ <- fiber.cancel
+        outcome <- fiber.join
+        _ <- IO(lateError(js.Dynamic.literal().asInstanceOf[dom.ProgressEvent]))
+        value <- emitted.get
+      } yield assert(outcome == Outcome.Canceled() && !value && aborts(0) == 1)
+    }.timeout(3.seconds).unsafeToFuture()
+  }
+
+  test("FileReader detaches handlers on success, error and registration failure without aborting") {
+    browser.use { env =>
+      val readers = scala.collection.mutable.ArrayBuffer.empty[js.Dynamic]
+      var mode = "success"
+      var aborts = 0
+      val prototype = env._1.window.FileReader.prototype
+      prototype.abort = ((_: js.Dynamic) => { aborts += 1 }): js.ThisFunction0[js.Dynamic, Unit]
+      prototype.readAsDataURL = ((reader: js.Dynamic, _: js.Any) => {
+        readers += reader
+        mode match {
+          case "success" =>
+            js.Dynamic.global.Object.defineProperty(reader, "result",
+              js.Dynamic.literal(value = "data:text/plain;base64,YQ=="))
+            reader.onload(js.Dynamic.literal())
+          case "error" => reader.onerror(js.Dynamic.literal())
+          case _ => throw new IllegalStateException("registration failed")
+        }
+        ()
+      }): js.ThisFunction1[js.Dynamic, js.Any, Unit]
+      val operation = Browser.encodeAsBase64(new dom.Blob(js.Array("a")))
+      for {
+        success <- operation
+        _ <- IO { mode = "error" }
+        error <- operation
+        _ <- IO { mode = "throw" }
+        failure <- operation.attempt
+      } yield {
+        assert(success == Right("YQ==") && error.isLeft && failure.isLeft)
+        assert(aborts == 0 && readers.size == 3)
+        assert(readers.forall(r => r.onload == null && r.onerror == null))
+      }
+    }.timeout(3.seconds).unsafeToFuture()
   }
 
 }

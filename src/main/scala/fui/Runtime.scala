@@ -71,34 +71,40 @@ class Runtime[Model, Msg] private (
     if (!active) IO.unit
     else
       cmd match {
-        case cmd @ Cmd.One(_, Some(Cmd.Debounce(key, delay))) =>
-          IO.uncancelable { _ =>
-            debounceLock.lock.surround {
-              for {
-                previous <- IO(debounceTimers.remove(key))
-                token = new Object()
-                fiber <- supervisor.supervise(
-                  IO.sleep(
-                    delay.max(scala.concurrent.duration.Duration.Zero)
-                  ) *>
-                    debounceLock.lock.surround(IO.uncancelable { _ =>
-                      IO(
-                        debounceTimers.get(key).exists(_._1 eq token)
-                      ).flatMap {
-                        case true =>
-                          IO(debounceTimers.remove(key)) *> runOne(cmd)
-                        case false => IO.unit
-                      }
-                    })
-                )
-                _ <- IO(debounceTimers.update(key, (token, fiber)))
-              } yield previous
-            }.flatMap(_.traverse_(_._2.cancel))
-          }
+        case cmd @ Cmd.One(_, Some(debounce)) => runDebounced(cmd, debounce)
         case cmd: Cmd.One[Msg] => runOne(cmd)
         case Cmd.Batch(cmds*)  => cmds.toList.traverse_(run)
       }
   }
+
+  private def runDebounced(
+      cmd: Cmd.One[Msg],
+      debounce: Cmd.Debounce
+  ): IO[Unit] = IO.uncancelable { _ =>
+    val Cmd.Debounce(key, delay) = debounce
+    debounceLock.lock.surround {
+      for {
+        previous <- IO(debounceTimers.remove(key))
+        token = new Object()
+        fiber <- supervisor.supervise(
+          IO.sleep(delay.max(scala.concurrent.duration.Duration.Zero)) *>
+            fireDebounced(cmd, key, token)
+        )
+        _ <- IO(debounceTimers.update(key, (token, fiber)))
+      } yield previous
+    }.flatMap(_.traverse_(_._2.cancel))
+  }
+
+  private def fireDebounced(
+      cmd: Cmd.One[Msg],
+      key: String,
+      token: Object
+  ): IO[Unit] = debounceLock.lock.surround(IO.uncancelable { _ =>
+    IO(debounceTimers.get(key).exists(_._1 eq token)).flatMap {
+      case true  => IO(debounceTimers.remove(key)) *> runOne(cmd)
+      case false => IO.unit
+    }
+  })
 
   private def runOne(cmd: Cmd.One[Msg]): IO[Unit] = IO.defer {
     if (active)

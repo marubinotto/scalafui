@@ -96,11 +96,11 @@ object Main {
           hot.initialize()
         }
       } *> {
-        Browser.runProgram(
+        Browser.run(
           dom.document.getElementById("app"),
           Program(init, view, update),
           dispatcher
-        ).use(_ => IO.never)
+        )
       }
     }
 }
@@ -423,7 +423,8 @@ Scalafui uses React 18 and creates one React root per Runtime. Keep `react` and
 Running an application acquires resources, including a React root, background
 work, and event listeners. `Runtime.make(container, program, dispatcher)` returns
 `Resource[IO, Runtime[Model, Msg]]`. The usual browser entry point,
-`Browser.runProgram`, wraps it and returns `Resource[IO, Unit]`.
+`Browser.run`, returns `IO[Unit]` and monitors fatal update-loop failures.
+The low-level `Browser.runProgram` remains available as `Resource[IO, Unit]`.
 
 Keep the application's resource scope open for as long as the UI should run.
 For an application-defined `program` and DOM `container`, the startup pattern is:
@@ -435,7 +436,7 @@ import fui.*
 
 val run: IO[Unit] =
   Dispatcher.parallel[IO].use { dispatcher =>
-    Browser.runProgram(container, program, dispatcher).use(_ => IO.never)
+    Browser.run(container, program, dispatcher)
   }
 ```
 
@@ -452,11 +453,32 @@ operations remain canceled rather than emitting a `Left` result. Each execution
 owns its cancellation resources; canceling one does not affect another.
 Image loading and geolocation do not currently abort their underlying operations.
 
+#### Runtime errors
+
+`Runtime.make`, `Browser.runProgram`, and `Browser.run` accept an optional
+`onError: RuntimeError => IO[Unit]`, defaulting to console logging. Unhandled
+command failures report `RuntimeError.Command`; failed subscriptions report
+`RuntimeError.Subscription(id, cause)`. Other work continues. Failed subscriptions
+keep their ID and do not automatically restart. Normal cancellation is not reported.
+Use `.attempt` to turn expected application failures into messages as before.
+
+An exception in the update loop stops message acceptance immediately.
+`Runtime.awaitFailure` observes the first cause without reporting or releasing
+resources. `Browser.run` waits for this failure, reports `RuntimeError.UpdateLoop`,
+and raises the original exception, releasing the application resources.
+Low-level resource users own their lifetime and fatal-error monitoring;
+`Browser.runProgram` does not automatically interrupt its caller's `use` body.
+Startup exceptions still fail resource acquisition directly.
+
+Reporters must terminate and must not cancel themselves. Synchronous exceptions
+and failed reporter IOs fall back to console logging without recursive notification.
+Fatal failure recording and input shutdown precede reporting. React-internal
+asynchronous rendering errors require a separate Error Boundary.
+
 ### Browser
 
-`Browser.runProgram` starts a Program in a DOM container and connects browser
-navigation to its URL change handler. Use the resource pattern above to manage
-its lifetime.
+`Browser.run` starts a Program in a DOM container and connects browser
+navigation to its URL change handler. Cancel the returned IO to stop the application.
 
 The other Browser helpers provide browser effects as lazy `IO` values. Compose
 them first, then convert to commands when returning work from `init` or `update`:
@@ -538,7 +560,7 @@ to Program, and handle that message in `update` by selecting the new page.
 See the [Multipage example](examples/multipage/src/main/scala/multipage/Main.scala)
 for a complete application with page-specific models and commands.
 
-With `Browser.runProgram`, `Browser.pushUrl(url)` adds a history entry without
+With `Browser.run` or `Browser.runProgram`, `Browser.pushUrl(url)` adds a history entry without
 loading a new document and notifies the URL change handler. Browser back/forward
 navigation also reaches that handler through `popstate`. `pushUrl(url, notify =
 false)` suppresses its notification; `replaceUrl(url)` replaces the current

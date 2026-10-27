@@ -87,11 +87,11 @@ object Main {
           hot.initialize()
         }
       } *> {
-        Browser.runProgram(
+        Browser.run(
           dom.document.getElementById("app"),
           Program(init, view, update),
           dispatcher
-        ).use(_ => IO.never)
+        )
       }
     }
 }

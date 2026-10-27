@@ -432,4 +432,147 @@ class RuntimeSpec extends AsyncFunSuite {
     }}.timeout(3.seconds).unsafeToFuture()
   }
 
+  test("command and subscription failures report once while other work continues") {
+    environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
+      for {
+        errors <- cats.effect.std.Queue.unbounded[IO, RuntimeError]
+        started <- cats.effect.Ref.of[IO, Int](0)
+        updates <- cats.effect.std.Queue.unbounded[IO, Int]
+        commandError = new Exception("command")
+        subError = new Exception("subscription")
+        _ <- Runtime.make(dom.document.getElementById("app"), Program[Int, Int](
+          _ => (0, Cmd.Batch(Cmd.exec(IO.raiseError[Unit](commandError)), Browser.send(1))),
+          (model, _) => div(model.toString),
+          (msg, model) => (model + 1, Cmd.exec(updates.offer(msg))),
+          _ => Sub.Impl("failed", fs2.Stream.eval(started.update(_ + 1) *>
+            IO.raiseError[Int](subError))).combine(Sub.Impl("live", fs2.Stream.emit(2)))
+        ), dispatcher, errors.offer).use { runtime =>
+          for {
+            first <- errors.take
+            second <- errors.take
+            a <- updates.take
+            b <- updates.take
+            _ <- IO(runtime.dispatch(3))
+            c <- updates.take
+            count <- started.get
+            extra <- errors.tryTake
+            _ <- IO {
+              assert(Set(first, second) == Set(RuntimeError.Command(commandError),
+                RuntimeError.Subscription("failed", subError)))
+              assert(Set(a, b) == Set(1, 2) && c == 3)
+              assert(count == 1 && extra.isEmpty)
+            }
+          } yield ()
+        }
+      } yield succeed
+    }}.timeout(3.seconds).unsafeToFuture()
+  }
+
+  test("fatal loop failures stop acceptance and remain observable") {
+    environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
+      List("update", "view", "subscriptions").traverse_ { stage =>
+        val failure = new Exception(stage)
+        val seen = scala.collection.mutable.ArrayBuffer.empty[Int]
+        Runtime.make(dom.document.getElementById("app"), Program[Int, Int](
+          _ => (0, Cmd.none),
+          (model, _) => if (model == 1 && stage == "view") throw failure else div(model.toString),
+          (msg, _) => {
+            seen += msg
+            if (stage == "update") throw failure
+            (msg, Cmd.none)
+          },
+          model => if (model == 1 && stage == "subscriptions") throw failure else Sub.Empty
+        ), dispatcher).use { runtime =>
+          for {
+            _ <- IO(runtime.dispatch(1))
+            error <- runtime.awaitFailure
+            _ <- IO(runtime.dispatch(2))
+            again <- runtime.awaitFailure
+            _ <- IO.cede
+            _ <- IO(assert((error eq failure) && (again eq failure) && seen.toList == List(1)))
+          } yield ()
+        }
+      }.as(succeed)
+    }}.timeout(3.seconds).unsafeToFuture()
+  }
+
+  test("reporter exceptions do not prevent other commands or fatal resource release") {
+    environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
+      List(true, false).traverse_ { synchronous =>
+        for {
+          attempted <- Deferred[IO, Unit]
+          continued <- Deferred[IO, Unit]
+          reporterError = new Exception("reporter")
+          reporter = (_: RuntimeError) => {
+            attempted.complete(()).unsafeRunAndForget()
+            if (synchronous) throw reporterError else IO.raiseError[Unit](reporterError)
+          }
+          _ <- Runtime.make(dom.document.getElementById("app"), Program[Int, Unit](
+            _ => (0, Cmd.Batch(Cmd.exec(IO.raiseError[Unit](new Exception("command"))),
+              Cmd.exec(attempted.get *> continued.complete(())))),
+            (_, _) => div("mounted"), (_, model) => (model, Cmd.none)
+          ), dispatcher, reporter).use(_ => continued.get)
+          fatal = new Exception("fatal")
+          result <- Browser.run(dom.document.getElementById("app"), Program[Int, Unit](
+            _ => (0, Browser.send(())), (_, _) => div("mounted"), (_, _) => throw fatal
+          ), dispatcher, reporter).attempt
+          _ <- IO {
+            assert(result == Left(fatal))
+            assert(dom.document.getElementById("app").childNodes.length == 0)
+          }
+        } yield ()
+      }.as(succeed)
+    }}.timeout(3.seconds).unsafeToFuture()
+  }
+
+  test("Browser.run releases work and URL listeners on failure and cancellation") {
+    environment.use { env => Dispatcher.parallel[IO].use { dispatcher =>
+      List(true, false).traverse_ { fail =>
+        for {
+          commandStarted <- Deferred[IO, Unit]
+          subStarted <- Deferred[IO, Unit]
+          trigger <- Deferred[IO, Unit]
+          cleaned <- cats.effect.Ref.of[IO, Set[String]](Set.empty)
+          reports <- cats.effect.Ref.of[IO, List[RuntimeError]](Nil)
+          timerRan <- cats.effect.Ref.of[IO, Boolean](false)
+          failure = new Exception("update")
+          conversions = scala.collection.mutable.ArrayBuffer.empty[String]
+          program = Program[Int, Unit](
+            _ => (0, Cmd.Batch(
+              Cmd.exec((commandStarted.complete(()) *> IO.never[Unit])
+                .guarantee(cleaned.update(_ + "command"))),
+              Cmd.exec(timerRan.set(true)).debounce("pending", 1.hour),
+              (commandStarted.get *> subStarted.get *> trigger.get).toCmd
+            )),
+            (_, _) => div("mounted"), (_, _) => throw failure,
+            _ => Sub.fromResource[Unit]("live")(_ => Resource.make(subStarted.complete(()))(
+              _ => cleaned.update(_ + "subscription")).void),
+            Some(_ => { conversions += "url"; () })
+          )
+          fiber <- Browser.run(dom.document.getElementById("app"), program, dispatcher,
+            error => reports.update(_ :+ error)).attempt.start
+          _ <- commandStarted.get *> subStarted.get
+          _ <- if (fail) trigger.complete(()).void else fiber.cancel
+          outcome <- fiber.join
+          result <- if (fail) outcome match {
+            case cats.effect.Outcome.Succeeded(value) => value
+            case other => IO.raiseError(new Exception(s"Unexpected outcome: $other"))
+          } else IO.pure(Right(()): Either[Throwable, Unit])
+          releases <- cleaned.get
+          errors <- reports.get
+          ran <- timerRan.get
+          _ <- Browser.pushUrl("/after")
+          _ <- IO {
+            env._1.window.dispatchEvent(js.Dynamic.newInstance(env._1.window.PopStateEvent)("popstate"))
+            assert(releases == Set("command", "subscription"))
+            assert(!ran && conversions.isEmpty)
+            assert(dom.document.getElementById("app").childNodes.length == 0)
+            assert(if (fail) result == Left(failure) && errors == List(RuntimeError.UpdateLoop(failure))
+              else errors.isEmpty)
+          }
+        } yield ()
+      }.as(succeed)
+    }}.timeout(3.seconds).unsafeToFuture()
+  }
+
 }

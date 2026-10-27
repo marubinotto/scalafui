@@ -205,6 +205,6 @@ object Main {
   def main(args: Array[String]): Unit = run.unsafeRunAndForget()
   def run: IO[Unit] = Dispatcher.parallel[IO].use { dispatcher =>
     IO { if (LinkingInfo.developmentMode) hot.initialize() } *>
-      Browser.runProgram(dom.document.getElementById("app"), Program(init, view, update, subscriptions), dispatcher).use(_ => IO.never)
+      Browser.run(dom.document.getElementById("app"), Program(init, view, update, subscriptions), dispatcher)
   }
 }

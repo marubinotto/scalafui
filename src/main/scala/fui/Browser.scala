@@ -9,6 +9,7 @@ import org.scalajs.dom.{Element, URL}
 
 import cats.effect.{IO, Resource}
 import cats.effect.std.Dispatcher
+import cats.syntax.functor.*
 
 import io.circe.*
 import io.circe.parser.*
@@ -22,19 +23,46 @@ object Browser {
 
   private var listenersOnPushUrl: List[URL => Unit] = Nil
 
+  /** Run until canceled or the update loop fails, releasing all owned
+    * resources.
+    */
+  def run[Model, Msg](
+      container: Element,
+      program: Program[Model, Msg],
+      dispatcher: Dispatcher[IO],
+      onError: RuntimeError => IO[Unit] = RuntimeError.log
+  ): IO[Unit] =
+    programResource(container, program, dispatcher, onError).use(
+      _.awaitTermination
+    )
+
+  /** Low-level lifetime management; use run for automatic fatal-error
+    * monitoring.
+    */
   def runProgram[Model, Msg](
       container: Element,
       program: Program[Model, Msg],
-      dispatcher: Dispatcher[IO]
+      dispatcher: Dispatcher[IO],
+      onError: RuntimeError => IO[Unit] = RuntimeError.log
   ): Resource[IO, Unit] =
-    Runtime.make(container, program, dispatcher).flatMap { runtime =>
+    programResource(container, program, dispatcher, onError).void
+
+  private def programResource[Model, Msg](
+      container: Element,
+      program: Program[Model, Msg],
+      dispatcher: Dispatcher[IO],
+      onError: RuntimeError => IO[Unit]
+  ): Resource[IO, Runtime[Model, Msg]] =
+    Runtime.make(container, program, dispatcher, onError).flatMap { runtime =>
       Resource.make(IO {
         val listener: URL => Unit = runtime.onPushUrl
         listenersOnPushUrl = listener :: listenersOnPushUrl
         listener
-      })(listener => IO {
-        listenersOnPushUrl = listenersOnPushUrl.filterNot(_ eq listener)
-      }).map(_ => ())
+      })(listener =>
+        IO {
+          listenersOnPushUrl = listenersOnPushUrl.filterNot(_ eq listener)
+        }
+      ).as(runtime)
     }
 
   def send[Msg](msg: Msg): Cmd.One[Msg] = IO.pure(msg).toCmd
@@ -74,19 +102,23 @@ object Browser {
       IO {
         val controller = new dom.AbortController()
         var canceled = false
-        dom.fetch(url, new dom.RequestInit {
-          method = requestMethod
-          signal = controller.signal
-        }).onComplete {
+        dom.fetch(
+          url,
+          new dom.RequestInit {
+            method = requestMethod
+            signal = controller.signal
+          }
+        ).onComplete {
           case Success(response) if !canceled =>
             scala.util.Try(consume(response)) match {
-              case Success(result) => result.onComplete { outcome =>
-                if (!canceled) cb(Right(outcome.toEither))
-              }
+              case Success(result) =>
+                result.onComplete { outcome =>
+                  if (!canceled) cb(Right(outcome.toEither))
+                }
               case Failure(error) => cb(Right(Left(error)))
             }
           case Failure(error) if !canceled => cb(Right(Left(error)))
-          case _ => ()
+          case _                           => ()
         }
         Some(IO {
           canceled = true
@@ -131,20 +163,29 @@ object Browser {
       blob: dom.Blob,
       removePadding: Boolean = false
   ): IO[Either[dom.ProgressEvent, String]] =
-    Resource.make(IO(new dom.FileReader()))(reader => IO {
-      reader.onload = null
-      reader.onerror = null
-    }).use { reader =>
+    Resource.make(IO(new dom.FileReader()))(reader =>
+      IO {
+        reader.onload = null
+        reader.onerror = null
+      }
+    ).use { reader =>
       IO.async { cb =>
         IO {
           var canceled = false
-          reader.onload = _ => if (!canceled) {
-            val url = reader.result.asInstanceOf[String]
-            val base64 = url.substring(url.indexOf(',') + 1)
-            cb(Right(Right(if (removePadding) base64.replaceAll("=+$", "") else base64)))
-          }
-          reader.onerror = (e: dom.ProgressEvent) =>
-            if (!canceled) cb(Right(Left(e)))
+          reader.onload = _ =>
+            if (!canceled) {
+              val url = reader.result.asInstanceOf[String]
+              val base64 = url.substring(url.indexOf(',') + 1)
+              cb(
+                Right(
+                  Right(
+                    if (removePadding) base64.replaceAll("=+$", "") else base64
+                  )
+                )
+              )
+            }
+          reader.onerror =
+            (e: dom.ProgressEvent) => if (!canceled) cb(Right(Left(e)))
           reader.readAsDataURL(blob)
           Some(IO {
             canceled = true

@@ -147,7 +147,7 @@ object Main {
           hot.initialize()
         }
       } *> {
-        Browser.runProgram(
+        Browser.run(
           dom.document.getElementById("app"),
           Program(
             init,
@@ -157,7 +157,7 @@ object Main {
             Some(UrlChanged(_))
           ),
           dispatcher
-        ).use(_ => IO.never)
+        )
       }
     }
 }

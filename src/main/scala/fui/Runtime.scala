@@ -6,7 +6,7 @@ import org.scalajs.dom
 import org.scalajs.dom.{Element, Event, URL}
 
 import cats.effect.{FiberIO, IO, Ref, Resource}
-import cats.effect.std.{Dispatcher, Queue, Supervisor}
+import cats.effect.std.{Dispatcher, Mutex, Queue, Supervisor}
 import cats.syntax.all.*
 import slinky.core.facade.ReactElement
 import slinky.web.ReactDOMClient
@@ -17,12 +17,13 @@ class Runtime[Model, Msg] private (
     dispatcher: Dispatcher[IO],
     queue: Queue[IO, Msg],
     supervisor: Supervisor[IO],
+    debounceLock: Mutex[IO],
     private var state: Model
 ) {
   // Scala.js callbacks and the message loop share a single JS thread.
   private var active = true
   private val subs: MutableMap[String, FiberIO[Unit]] = MutableMap()
-  private val debounceTimers: MutableMap[String, Int] = MutableMap()
+  private val debounceTimers: MutableMap[String, (Object, FiberIO[Unit])] = MutableMap()
 
   def dispatch(msg: Msg): Unit =
     if (active) dispatcher.unsafeRunAndForget(offer(msg))
@@ -41,15 +42,25 @@ class Runtime[Model, Msg] private (
   private def run(cmd: Cmd[Msg]): IO[Unit] = IO.defer {
     if (!active) IO.unit
     else cmd match {
-      case cmd @ Cmd.One(_, Some(Cmd.Debounce(key, delay))) => IO {
-        debounceTimers.get(key).foreach(dom.window.clearTimeout)
-        val timer = dom.window.setTimeout(() => {
-          debounceTimers.remove(key)
-          if (active) dispatcher.unsafeRunAndForget(runOne(cmd))
-        }, delay)
-        debounceTimers.put(key, timer)
-        ()
-      }
+      case cmd @ Cmd.One(_, Some(Cmd.Debounce(key, delay))) =>
+        IO.uncancelable { _ =>
+          debounceLock.lock.surround {
+            for {
+              previous <- IO(debounceTimers.remove(key))
+              token = new Object()
+              fiber <- supervisor.supervise(
+                IO.sleep(delay.max(scala.concurrent.duration.Duration.Zero)) *>
+                  debounceLock.lock.surround(IO.uncancelable { _ =>
+                    IO(debounceTimers.get(key).exists(_._1 eq token)).flatMap {
+                      case true => IO(debounceTimers.remove(key)) *> runOne(cmd)
+                      case false => IO.unit
+                    }
+                  })
+              )
+              _ <- IO(debounceTimers.update(key, (token, fiber)))
+            } yield previous
+          }.flatMap(_.traverse_(_._2.cancel))
+        }
       case cmd: Cmd.One[Msg] => runOne(cmd)
       case Cmd.Batch(cmds*) => cmds.toList.traverse_(run)
     }
@@ -82,8 +93,11 @@ class Runtime[Model, Msg] private (
   private def stopAccepting: IO[Unit] = IO { active = false }
 
   private def clearTimers: IO[Unit] =
-    IO(debounceTimers.values.toList).flatMap(_.traverse_(id => IO(dom.window.clearTimeout(id))))
-      .guarantee(IO(debounceTimers.clear()))
+    debounceLock.lock.surround(IO {
+      val pending = debounceTimers.values.toList
+      debounceTimers.clear()
+      pending
+    }).flatMap(_.traverse_(_._2.cancel))
 
   private def urlListener: Resource[IO, Unit] = program.onUrlChange match {
     case None => Resource.unit[IO]
@@ -106,10 +120,11 @@ object Runtime {
     for {
       root <- Resource.make(IO(ReactDOMClient.createRoot(container)))(root => IO(root.unmount()))
       supervisor <- Supervisor[IO](await = false)
+      debounceLock <- Resource.eval(Mutex[IO])
       queue <- Resource.eval(Queue.unbounded[IO, Msg])
       init <- Resource.eval(IO(program.init(new URL(dom.window.location.href))))
       runtime <- Resource.eval(IO(new Runtime(
-        element => root.render(element), program, dispatcher, queue, supervisor, init._1
+        element => root.render(element), program, dispatcher, queue, supervisor, debounceLock, init._1
       )))
       // Finalizers run in reverse acquisition order: close inputs, stop work, unmount.
       loop <- Resource.make(Ref.of[IO, Option[FiberIO[Unit]]](None))(

@@ -14,6 +14,14 @@ class SubSpec extends AsyncFunSuite {
 
   private def stream[A](sub: Sub[A]): Stream[IO, A] = Sub.toMap(sub).values.head
 
+  test("every reads epoch milliseconds from the effect clock at each virtual tick") {
+    cats.effect.testkit.TestControl.executeEmbed {
+      stream(Sub.every(1.second, "clock")).take(3).compile.toList.map { ticks =>
+        assert(ticks == List(1000L, 2000L, 3000L))
+      }
+    }.unsafeToFuture()
+  }
+
   test("callback emissions during registration are retained and cleanup runs once") {
     (for {
       cleanups <- Ref.of[IO, Int](0)

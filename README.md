@@ -194,6 +194,7 @@ to notify the application with `.toCmd`, `Cmd.exec`, or `Cmd.optional`.
 
 ```scala
 import fui.*
+import scala.concurrent.duration.*
 
 val loadDraft = (
   Browser.setLocalStorage("draft", "hello") *>
@@ -201,7 +202,7 @@ val loadDraft = (
 ).toCmd // emits Some("hello") as the message
 
 val saveOnly = Cmd.exec(Browser.setLocalStorage("draft", "hello"))
-val request = Browser.ajaxGetJson("/data.json").toCmd.debounce("load", 500)
+val request = Browser.ajaxGetJson("/data.json").toCmd.debounce("load", 500.millis)
 ```
 
 URL changes, reload, theme changes, and storage writes/removal return `IO[Unit]`.
@@ -232,6 +233,7 @@ Compose computations with ordinary `IO`, then use `.toCmd` (available through
 ```scala
 import cats.effect.IO
 import fui.*
+import scala.concurrent.duration.*
 
 def search(query: String): IO[String] = IO.pure(query)
 def saveDraft: IO[Unit] = IO.unit
@@ -249,7 +251,7 @@ val optional = Cmd.optional(search("scala").map(result =>
 
 // Independent commands: save immediately, debounce the whole search computation.
 val commands = Cmd.Batch(
-  search("scala").map(SearchCompleted.apply).toCmd.debounce("search", 500),
+  search("scala").map(SearchCompleted.apply).toCmd.debounce("search", 500.millis),
   save
 )
 ```
@@ -285,8 +287,8 @@ val search = Root & Param[String]("query")
 val work = Root / "work" / Arg[String]()
 val paged = work & Param[String]("query") & Param[Int]("page")
 
-search.url("Scala + UI") // /?query=Scala+%2B+UI
-paged.url(("123", "Scala", 2)) // /work/123?query=Scala&page=2
+search.url("Scala + UI") // Right("/?query=Scala+%2B+UI")
+paged.url(("123", "Scala", 2)) // Right("/work/123?query=Scala&page=2")
 ```
 
 Patterns match relative URLs containing a path, query and optional fragment. Required query parameters must be present and decode successfully; empty strings are valid. The first repeated value wins, unknown parameters and fragments are ignored, and path-only routes also match URLs with queries. Order more specific query patterns before path-only fallbacks. Both path arguments and query values use `Codec`; query encoding follows `URLSearchParams`.
@@ -319,3 +321,32 @@ Sub.fromCallback[Msg]("external-events") { emit =>
 ```
 
 Runtime cancels a subscription's stream when its ID disappears, running its cleanup. IDs determine identity: changing a stream under an existing ID does not restart it. Remove the ID before adding it again to restart a completed or stopped subscription. Callback adapters must return their cleanup after registration; registration failures should release any partially acquired external resources themselves.
+
+## Typed time and URL generation
+
+`Sub.every` emits Unix epoch milliseconds obtained through `Clock[IO].realTime`.
+Its interval and `Cmd.One.debounce` delays use `FiniteDuration`:
+
+```scala
+import scala.concurrent.duration.*
+
+request.toCmd.debounce("search", 500.millis)
+```
+
+Debounce replaces only pending work with the same key. Commands already started
+continue independently. Zero or negative delays do not wait. Pending waits use
+`IO.sleep` and are canceled when the Runtime resource is released.
+The old numeric-millisecond debounce API and both `Browser.debounce` helpers
+have been removed; use command debounce instead.
+
+`RoutePattern.url(value)` now returns `Either[RouteError, String]`.
+`PathArgumentRejected` and `QueryParameterRejected(name)` report a Codec returning
+`None`; `EncodingFailed(underlying)` preserves an exception from encoding.
+Handle the result explicitly, or lift it into IO before browser navigation:
+
+```scala
+Cmd.exec(IO.fromEither(route.url(value)).flatMap(url => Browser.pushUrl(url)))
+```
+
+The previous String-returning URL API is no longer available. URL parsing keeps
+its existing `Option` result and matching behavior.

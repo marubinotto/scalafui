@@ -2,6 +2,7 @@ package fui
 
 import scala.util.{Failure, Success}
 import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
 import cats.effect.IO
 
 extension [A](io: IO[A]) {
@@ -25,7 +26,7 @@ object Cmd {
   /** Emit only when the computation returns Some. */
   def optional[Msg](io: IO[Option[Msg]]): One[Msg] = One(io)
 
-  case class Debounce(key: String, delay: Double)
+  case class Debounce(key: String, delay: FiniteDuration)
 
   case class One[+Msg](io: IO[Option[Msg]], debounce: Option[Debounce] = None)
       extends Cmd[Msg] {
@@ -40,7 +41,7 @@ object Cmd {
 
     def toNone[OtherMsg]: One[OtherMsg] = One(io.map(_ => None), debounce)
 
-    def debounce(key: String, delay: Double): One[Msg] =
+    def debounce(key: String, delay: FiniteDuration): One[Msg] =
       copy(debounce = Some(Debounce(key, delay)))
   }
 

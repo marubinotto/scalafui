@@ -1,9 +1,11 @@
 package multipage.page
 
+import scala.concurrent.duration.*
 import slinky.core.facade.ReactElement
 import slinky.web.html.*
 
 import fui.*
+import cats.effect.IO
 
 import multipage.domain
 import multipage.Server
@@ -58,17 +60,17 @@ object Search {
               loadingError = None,
               works = Seq.empty
             ),
-            Cmd.exec(Browser.replaceUrl(Route.search.url(())))
-              .debounce(DebounceKey, 1) // Cancel previous search
+            Cmd.exec(IO.fromEither(Route.search.url(())).flatMap(Browser.replaceUrl))
+              .debounce(DebounceKey, 1.millis) // Cancel previous search
           )
         else
           (
             model.copy(query = query, loading = true, loadingError = None),
             Cmd.Batch(
-              Cmd.exec(Browser.replaceUrl(Route.searchWithQuery.url(query))),
+              Cmd.exec(IO.fromEither(Route.searchWithQuery.url(query)).flatMap(Browser.replaceUrl)),
               Server.searchWorks(query)
                 .map(SearchResult(query, _)).toCmd
-                .debounce(DebounceKey, 500)
+                .debounce(DebounceKey, 500.millis)
             )
           )
 
@@ -87,7 +89,7 @@ object Search {
         )
 
       case FoundItemClicked(workId) =>
-        (model, Cmd.exec(Browser.pushUrl(Route.work.url(workId))))
+        (model, Cmd.exec(IO.fromEither(Route.work.url(workId)).flatMap(url => Browser.pushUrl(url))))
     }
 
   //

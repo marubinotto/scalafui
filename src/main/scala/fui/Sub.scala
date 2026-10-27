@@ -5,7 +5,7 @@ import scala.scalajs.js
 import org.scalajs.dom.EventTarget
 
 import cats.MonoidK
-import cats.effect.IO
+import cats.effect.{Clock, IO}
 import cats.effect.std.Dispatcher
 import cats.effect.std.Queue
 
@@ -84,7 +84,7 @@ object Sub {
   def every(interval: FiniteDuration, id: String): Sub[Long] =
     Impl[Long](
       id,
-      Stream.awakeEvery[IO](interval).map(_ => System.currentTimeMillis())
+      Stream.awakeEvery[IO](interval).evalMap(_ => Clock[IO].realTime.map(_.toMillis))
     )
 
   def fromEvent[Event, Msg](name: String, target: EventTarget)(

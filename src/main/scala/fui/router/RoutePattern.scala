@@ -8,8 +8,8 @@ import org.scalajs.dom.URLSearchParams
 abstract class RoutePattern[A] { self =>
 
   protected def consume(segments: List[String], query: URLSearchParams): Option[(A, List[String])]
-  protected def renderSegments(value: A): List[String]
-  protected def renderQuery(value: A): List[(String, String)] = Nil
+  protected def renderSegments(value: A): Either[RouteError, List[String]]
+  protected def renderQuery(@unused value: A): Either[RouteError, List[(String, String)]] = Right(Nil)
 
   final def /(segment: String): RoutePattern[A] =
     new RoutePattern[A] {
@@ -24,10 +24,10 @@ abstract class RoutePattern[A] { self =>
             None
         }
 
-      override protected def renderSegments(value: A): List[String] =
-        self.renderSegments(value) :+ segment
+      override protected def renderSegments(value: A): Either[RouteError, List[String]] =
+        self.renderSegments(value).map(_ :+ segment)
 
-      override protected def renderQuery(value: A): List[(String, String)] =
+      override protected def renderQuery(value: A): Either[RouteError, List[(String, String)]] =
         self.renderQuery(value)
     }
 
@@ -49,17 +49,15 @@ abstract class RoutePattern[A] { self =>
             codec.decode(None).map(value => (appender.append(left, value), Nil))
         }
 
-      override protected def renderSegments(value: Out): List[String] = {
+      override protected def renderSegments(value: Out): Either[RouteError, List[String]] = {
         val (left, right) = appender.split(value)
-        val encoded = codec.encode(right).getOrElse {
-          throw new IllegalArgumentException(
-            s"Could not encode route argument: ${right}"
-          )
-        }
-        self.renderSegments(left) :+ encoded
+        for {
+          leftSegments <- self.renderSegments(left)
+          encoded <- codec.encode(right).toRight(RouteError.PathArgumentRejected())
+        } yield leftSegments :+ encoded
       }
 
-      override protected def renderQuery(value: Out): List[(String, String)] =
+      override protected def renderQuery(value: Out): Either[RouteError, List[(String, String)]] =
         self.renderQuery(appender.split(value)._1)
     }
 
@@ -78,26 +76,33 @@ abstract class RoutePattern[A] { self =>
             .map(right => (appender.append(left, right), remaining))
         }
 
-      override protected def renderSegments(value: Out): List[String] =
+      override protected def renderSegments(value: Out): Either[RouteError, List[String]] =
         self.renderSegments(appender.split(value)._1)
 
-      override protected def renderQuery(value: Out): List[(String, String)] = {
+      override protected def renderQuery(value: Out): Either[RouteError, List[(String, String)]] = {
         val (left, right) = appender.split(value)
-        val encoded = codec.encode(right).getOrElse {
-          throw new IllegalArgumentException(s"Could not encode query parameter: ${param.name}")
-        }
-        self.renderQuery(left) :+ (param.name -> encoded)
+        for {
+          leftQuery <- self.renderQuery(left)
+          encoded <- codec.encode(right).toRight(RouteError.QueryParameterRejected(param.name))
+        } yield leftQuery :+ (param.name -> encoded)
       }
     }
 
-  final def url(value: A): String = {
-    val segments = renderSegments(value).map(encodeSegment)
-    val path = if (segments.isEmpty) "/" else "/" + segments.mkString("/")
-    val query = new URLSearchParams()
-    renderQuery(value).foreach { case (name, encoded) => query.append(name, encoded) }
-    val suffix = query.toString
-    if (suffix.isEmpty) path else path + "?" + suffix
-  }
+  /** Render a URL, retaining encoding failures as values. */
+  final def url(value: A): Either[RouteError, String] =
+    Try {
+      for {
+        rawSegments <- renderSegments(value)
+        segments = rawSegments.map(encodeSegment)
+        entries <- renderQuery(value)
+      } yield {
+        val path = if (segments.isEmpty) "/" else "/" + segments.mkString("/")
+        val query = new URLSearchParams()
+        entries.foreach { case (name, encoded) => query.append(name, encoded) }
+        val suffix = query.toString
+        if (suffix.isEmpty) path else path + "?" + suffix
+      }
+    }.toEither.left.map(RouteError.EncodingFailed(_)).flatten
 
   /** Matches a relative URL; unknown query parameters and fragments are ignored. */
   final def unapply(url: String): Option[A] = {
@@ -124,7 +129,7 @@ object Root extends RoutePattern[Unit] {
   ): Option[(Unit, List[String])] =
     Some(((), segments))
 
-  override protected def renderSegments(value: Unit): List[String] = Nil
+  override protected def renderSegments(value: Unit): Either[RouteError, List[String]] = Right(Nil)
 }
 
 private object RoutePattern {

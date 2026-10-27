@@ -63,7 +63,7 @@ class CmdSpec extends AsyncFunSuite {
     case class Parent(value: Int)
     def update(model: Int): (Int, Cmd[Int]) =
       (model + 1, (IO.unit *> IO.pure(model)).toCmd)
-    val child = IO.pure(1).toCmd.debounce("search", 500)
+    val child = IO.pure(1).toCmd.debounce("search", 500.millis)
     val mapped = child.map(Parent.apply)
     val discarded = child.toNone[Parent]
     val batch: Cmd[Parent] = Cmd.Batch(mapped, Cmd.exec(IO.unit)) ++ Cmd.none

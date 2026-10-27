@@ -85,7 +85,7 @@ class RuntimeSpec extends AsyncFunSuite {
           (model, _) => div(model.toString),
           (msg, model) =>
             if (msg < 0) (model, Cmd(done.complete((model, msg)).as(None)))
-            else (model + 1, Browser.send(-msg).debounce("burst", 30))
+            else (model + 1, Browser.send(-msg).debounce("burst", 30.millis))
         ), dispatcher)
         _ <- Resource.eval(IO((1 to 100).foreach(runtime.dispatch)))
         count <- Resource.eval(done.get.timeout(3.seconds))
@@ -269,12 +269,12 @@ class RuntimeSpec extends AsyncFunSuite {
         seen <- cats.effect.std.Queue.unbounded[IO, Int]
         canceled <- cats.effect.Ref.of[IO, Boolean](false)
         slow = (started.complete(()) *> finish.get.as(1))
-          .onCancel(canceled.set(true)).toCmd.debounce("search", 1)
+          .onCancel(canceled.set(true)).toCmd.debounce("search", 1.millis)
         program = Program[Int, Int](
           _ => (0, Cmd.Batch(slow, IO.pure(2).toCmd) ++ Cmd.none),
           (model, _) => div(model.toString),
           (msg, model) =>
-            if (msg == 0) (model, IO.pure(3).toCmd.debounce("search", 1))
+            if (msg == 0) (model, IO.pure(3).toCmd.debounce("search", 1.millis))
             else (model, Cmd.exec(seen.offer(msg)))
         )
         _ <- Runtime.make(dom.document.getElementById("app"), program, dispatcher).use { runtime =>
@@ -295,13 +295,42 @@ class RuntimeSpec extends AsyncFunSuite {
     }}.timeout(3.seconds).unsafeToFuture()
   }
 
+  test("debounce keys are independent and non-positive delays run without waiting") {
+    environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
+      for {
+        seen <- cats.effect.std.Queue.unbounded[IO, Int]
+        program = Program[Int, Int](
+          _ => (0, Cmd.Batch(
+            IO.pure(1).toCmd.debounce("a", 50.millis),
+            IO.pure(2).toCmd.debounce("a", 50.millis),
+            IO.pure(3).toCmd.debounce("b", 50.millis),
+            IO.pure(4).toCmd.debounce("zero", Duration.Zero),
+            IO.pure(5).toCmd.debounce("negative", (-1).second)
+          )),
+          (model, _) => div(model.toString),
+          (msg, model) => (model, Cmd.exec(seen.offer(msg)))
+        )
+        _ <- Runtime.make(dom.document.getElementById("app"), program, dispatcher).use { _ =>
+          for {
+            values <- List.fill(4)(seen.take).sequence
+            _ <- IO.sleep(80.millis)
+            extra <- seen.tryTake
+          } yield {
+            assert(values.sorted == List(2, 3, 4, 5))
+            assert(extra.isEmpty)
+          }
+        }
+      } yield succeed
+    }}.timeout(3.seconds).unsafeToFuture()
+  }
+
   test("release clears pending debounce and ignores retained dispatch callbacks") {
     environment.use { _ => Dispatcher.parallel[IO].use { dispatcher =>
       for {
         executions <- cats.effect.Ref.of[IO, Int](0)
         updates = scala.collection.mutable.ArrayBuffer.empty[Int]
         runtime <- Runtime.make(dom.document.getElementById("app"), Program[Int, Int](
-          _ => (0, Cmd(executions.update(_ + 1).as(None)).debounce("pending", 100)),
+          _ => (0, Cmd(executions.update(_ + 1).as(None)).debounce("pending", 100.millis)),
           (model, _) => div(model.toString),
           (msg, model) => { updates += msg; (model, Cmd.none) }
         ), dispatcher).use(IO.pure)

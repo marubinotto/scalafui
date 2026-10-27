@@ -87,7 +87,7 @@ class Runtime[Model, Msg] private (
         previous <- IO(debounceTimers.remove(key))
         token = new Object()
         fiber <- supervisor.supervise(
-          IO.sleep(delay.max(scala.concurrent.duration.Duration.Zero)) *>
+          IO.sleep(delay) *>
             fireDebounced(cmd, key, token)
         )
         _ <- IO(debounceTimers.update(key, (token, fiber)))

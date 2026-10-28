@@ -10,9 +10,8 @@ import cats.effect.IO
 import multipage.domain
 import multipage.Server
 import multipage.LoadState
-import multipage.Main.Route
 
-object Search {
+object Search extends Feature[String, Search.Model, Search.Msg, Search.Out] {
 
   //
   // MODEL
@@ -24,10 +23,11 @@ object Search {
       works: LoadState[Seq[domain.Work]] = LoadState.Idle
   )
 
-  def init(): (Model, Cmd[Msg]) = (Model(), Cmd.none)
+  def init(): Transition[Model, Msg, Out] = Transition(Model())
 
-  def init(query: String): (Model, Cmd[Msg]) =
-    (
+  def init(query: String): Transition[Model, Msg, Out] =
+    if (query.isBlank) Transition(Model(query = query))
+    else Transition(
       Model(query = query, works = LoadState.Loading),
       Server.searchWorks(query).map(SearchResult(0, _)).toCmd
     )
@@ -45,46 +45,46 @@ object Search {
     case FoundItemClicked(workId: String)
   }
 
+  enum Out {
+    case QueryChanged(query: String)
+    case OpenWork(workId: String)
+  }
+
   export Msg.*
 
   val DebounceKey = "search"
 
-  def update(msg: Msg, model: Model): (Model, Cmd[Msg]) =
+  def update(msg: Msg, model: Model): Transition[Model, Msg, Out] =
     msg match {
       case QueryInput(query) =>
         val serial = model.requestSerial + 1
         if (query.isBlank())
-          (
-            model.copy(
-              query = query,
-              requestSerial = serial,
-              works = LoadState.Idle
-            ),
-            Cmd.exec(IO.fromEither(Route.search.url(())).flatMap(Browser.replaceUrl))
-              .debounce(DebounceKey, 1.millis) // Cancel a pending debounce; response serials reject requests already in flight.
+          Transition(
+            model.copy(query = query, requestSerial = serial, works = LoadState.Idle),
+            // Replace a pending debounce without starting another request.
+            Cmd.exec(IO.unit).debounce(DebounceKey, 1.millis),
+            List(Out.QueryChanged(query))
           )
         else
-          (
+          Transition(
             model.copy(query = query, requestSerial = serial, works = LoadState.Loading),
-            Cmd.Batch(
-              Cmd.exec(IO.fromEither(Route.searchWithQuery.url(query)).flatMap(Browser.replaceUrl)),
-              Server.searchWorks(query)
-                .map(SearchResult(serial, _)).toCmd
-                .debounce(DebounceKey, 500.millis)
-            )
+            Server.searchWorks(query)
+              .map(SearchResult(serial, _)).toCmd
+              .debounce(DebounceKey, 500.millis),
+            List(Out.QueryChanged(query))
           )
 
       case SearchResult(serial, _) if serial != model.requestSerial =>
-        (model, Cmd.none)
+        Transition.unchanged(model)
 
       case SearchResult(_, Right(works)) =>
-        (model.copy(works = LoadState.Loaded(works)), Cmd.none)
+        Transition(model.copy(works = LoadState.Loaded(works)))
 
       case SearchResult(_, Left(error)) =>
-        (model.copy(works = LoadState.Failed(error)), Cmd.none)
+        Transition(model.copy(works = LoadState.Failed(error)))
 
       case FoundItemClicked(workId) =>
-        (model, Cmd.exec(IO.fromEither(Route.work.url(workId)).flatMap(url => Browser.pushUrl(url))))
+        Transition(model, outputs = List(Out.OpenWork(workId)))
     }
 
   //

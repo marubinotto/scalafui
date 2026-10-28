@@ -11,7 +11,7 @@ import multipage.domain
 import multipage.Server
 import multipage.LoadState
 
-object Work {
+object Work extends Feature[String, Work.Model, Work.Msg, Nothing] {
 
   //
   // MODEL
@@ -23,8 +23,8 @@ object Work {
       editions: LoadState[Seq[domain.Edition]] = LoadState.Loading
   )
 
-  def init(workId: String): (Model, Cmd[Msg]) =
-    (
+  def init(workId: String): Transition[Model, Msg, Nothing] =
+    Transition(
       Model(workId),
       Cmd.Batch(
         Server.fetchWork(workId).map(WorkFetched(_)).toCmd,
@@ -43,19 +43,19 @@ object Work {
 
   export Msg.*
 
-  def update(msg: Msg, model: Model): (Model, Cmd[Msg]) =
+  def update(msg: Msg, model: Model): Transition[Model, Msg, Nothing] =
     msg match {
       case WorkFetched(Right(work)) =>
-        (model.copy(work = LoadState.Loaded(work)), Cmd.none)
+        Transition(model.copy(work = LoadState.Loaded(work)), Cmd.none)
 
       case WorkFetched(Left(error)) =>
-        (model.copy(work = LoadState.Failed(error)), Cmd.none)
+        Transition(model.copy(work = LoadState.Failed(error)), Cmd.none)
 
       case EditionsFetched(Right(editions)) =>
-        (model.copy(editions = LoadState.Loaded(editions)), Cmd.none)
+        Transition(model.copy(editions = LoadState.Loaded(editions)), Cmd.none)
 
       case EditionsFetched(Left(error)) =>
-        (model.copy(editions = LoadState.Failed(error)), Cmd.none)
+        Transition(model.copy(editions = LoadState.Failed(error)), Cmd.none)
     }
 
   //

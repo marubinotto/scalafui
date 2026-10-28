@@ -521,6 +521,285 @@ even for a non-success HTTP status; inspect its status yourself. Image loading
 and Base64 decoding begin only when the IO runs, and failures fail the IO.
 `Browser.send(msg)` is also available to construct a command that emits a message.
 
+## Features: composition beyond Elm Architecture
+
+`Feature` is Scalafui's additional abstraction for composing stateful functionality.
+It builds on Model/View/Update; it is not a requirement
+of the Elm Architecture or a replacement for its pure state transitions. You can
+continue building an application with the basic `Program` alone.
+
+A feature can represent a page, an editor pane, a search panel, or a dialog.
+Keep presentation-only components as ordinary view functions. Use a feature when
+a part of the application has its own state transitions or work to manage.
+
+### Definitions, instances, and slots
+
+- A **Feature** defines initialization, updates, and rendering. It
+  can be reused without sharing state.
+- An **instance** is one use of that definition, with its own Model and message address.
+- A **FeatureSlot** is a logical position in the parent's state that contains at most
+  one instance. It can be empty or contain one of its registered variants. It is
+  not a DOM location and has no dependency on routing.
+
+All child Models remain in the parent's state tree. One Runtime processes the
+messages; creating children does not create additional stores or message loops.
+Multiple slots can be active simultaneously, and features can contain more slots.
+
+```mermaid
+flowchart TD
+  app["App: parent update and Out handlers"]
+  subgraph model["Parent Model"]
+    searchState["Search slot + child Model"]
+    editorState["Editor slot + child Model"]
+  end
+  search["Search Feature"]
+  editor["Editor Feature"]
+  subs["App subscriptions: Model to Sub"]
+  runtime["Unchanged Runtime: Msg queue, Cmd and Sub execution"]
+  app -- "open / clear / update" --> model
+  searchState -- "Model" --> search
+  editorState -- "Model" --> editor
+  search -- "Out" --> app
+  editor -- "Out" --> app
+  model --> subs
+  subs --> runtime
+  search -- "ordinary Cmd" --> runtime
+  editor -- "ordinary Cmd" --> runtime
+  runtime -- "Msg via slot address check" --> search
+  runtime -- "Msg via slot address check" --> editor
+```
+
+### Defining a feature
+
+`Feature[Input, Model, Msg, Out]` receives feature-specific initialization input.
+Its `init` and `update` return `Transition(model, cmd, outputs)`; commands and
+outputs default to empty. `Transition.unchanged(model)` is a convenient no-op.
+Features do not declare subscriptions; the App declares them through Program or
+FeatureProgram.
+
+`Msg` describes internal events. `Out` describes events the owner should handle.
+For example, search can output `OpenWork(id)` without knowing whether its owner
+will navigate to a page or open a side panel. Use `Nothing` when there are no outputs.
+
+This small catalog example uses fixed data, so the composition is visible without
+HTTP or routing code. Search emits a selection; Work displays it and emits a
+request to go back.
+
+```scala
+import fui.*
+import slinky.web.html.*
+
+val catalog = Map("one" -> "Functional UI", "two" -> "Learning Scala")
+
+object Search extends Feature[String, String, Search.Msg, Search.Out] {
+  enum Msg {
+    case QueryChanged(query: String)
+    case Selected(id: String)
+  }
+  enum Out {
+    case OpenWork(id: String)
+  }
+
+  def init(query: String): Transition[String, Msg, Out] = Transition(query)
+
+  def update(msg: Msg, query: String): Transition[String, Msg, Out] = msg match {
+    case Msg.QueryChanged(value) => Transition(value)
+    case Msg.Selected(id) => Transition(query, outputs = List(Out.OpenWork(id)))
+  }
+
+  def view(query: String, dispatch: Msg => Unit) = div(
+    input(value := query,
+      onChange := (e => dispatch(Msg.QueryChanged(e.target.value)))),
+    catalog.toSeq.sortBy(_._1)
+      .filter { case (_, title) => title.toLowerCase.contains(query.toLowerCase) }
+      .map { case (id, title) =>
+        button(key := id, onClick := (_ => dispatch(Msg.Selected(id))))(title)
+      }
+  )
+}
+
+object Work extends Feature[String, String, Work.Msg, Work.Out] {
+  enum Msg { case Back }
+  enum Out { case Back }
+
+  def init(id: String): Transition[String, Msg, Out] = Transition(id)
+
+  def update(msg: Msg, id: String): Transition[String, Msg, Out] = msg match {
+    case Msg.Back => Transition(id, outputs = List(Out.Back))
+  }
+
+  def view(id: String, dispatch: Msg => Unit) = div(
+    h2(catalog.getOrElse(id, "Unknown work")),
+    button(onClick := (_ => dispatch(Msg.Back)))("Back to search")
+  )
+}
+```
+
+### Connecting a child to its parent
+
+Register variants in a stable slot definition. Each slot has its own `State`,
+`Event`, and `Output` types; events from a different slot cannot be passed to it.
+Use separate slot definitions for two independently active positions, even when
+both contain the same feature definition.
+
+`bind` describes how to read and replace the slot state, wrap and extract its
+messages, and handle outputs. It returns a `FeatureBinding` connection. Register that
+connection with `withFeatures` so child updates and outputs are routed.
+Each `withFeatures` call accepts one binding, which connects all variants in its
+slot. Chain calls to compose multiple slots. A slot can be registered only once
+in a given parent.
+
+The following connects both features through one binding. `Pages` holds either
+Search or Work, never both at once. The earlier diagram shows the alternative:
+separate slots for features displayed simultaneously.
+
+The output handler is a method, so it can refer to `pageBinding` without evaluating
+it during binding construction. Returning to Search resets the query in this example:
+
+```scala
+import org.scalajs.dom.URL
+
+object Pages extends FeatureSlot {
+  val search = variant(Search)
+  val work = variant(Work)
+}
+
+case class Model(page: Pages.State = Pages.empty)
+
+enum Msg {
+  case PageEvent(event: Pages.Event)
+}
+
+def onPageOutput(output: Pages.Output, model: Model): Transition[Model, Msg, Nothing] =
+  output match {
+    case Pages.search.output(Search.Out.OpenWork(id)) =>
+      pageBinding.open(model, Pages.work, id)
+    case Pages.work.output(Work.Out.Back) =>
+      pageBinding.open(model, Pages.search, "")
+    case _ => Transition.unchanged(model)
+  }
+
+val pageBinding = Pages.bind[Model, Msg, Nothing](
+  state = _.page,
+  replace = (model, page) => model.copy(page = page),
+  wrap = Msg.PageEvent.apply,
+  extract = {
+    case Msg.PageEvent(event) => Some(event)
+  },
+  onOutput = onPageOutput
+)
+
+val program = FeatureProgram[Model, Msg](
+  init = (_: URL) => pageBinding.open(Model(), Pages.search, ""),
+  update = (_, model) => Transition.unchanged(model),
+  view = (model, dispatch) =>
+    pageBinding.view(model, dispatch, div("No page selected"))
+).withFeatures(pageBinding).program
+```
+
+The single `withFeatures(pageBinding)` call connects both registered variants.
+Selecting a search result emits `OpenWork(id)`; the parent opens Work. The Back
+button emits `Work.Out.Back`; the parent opens Search again.
+
+Pass the resulting `Program` to `Browser.run`, `Browser.mount`, or `Runtime.make`
+as usual. `FeatureProgram` also accepts `subscriptions` and `onUrlChange`.
+For nesting, attach a connection to a `Feature` with `withFeatures` and register the
+returned composed feature as a variant in its parent's slot.
+
+Child events are intercepted by the connection and do not also execute the
+parent's update. After updating the child, outputs are handled in list order,
+with each handler seeing the previous handler's resulting parent Model. Initial
+outputs follow the same rule, after the child has been installed. The completed
+transition is rendered once. An output handler can close or replace the child,
+but commands already generated by that transition still execute. Their results
+are ignored if the destination instance is no longer present.
+
+`FeatureBinding.open` and `FeatureBinding.clear` return parent transitions. When opening several
+children in one transition, pass each resulting Model to the next operation and
+combine their commands with `++`; do not discard earlier commands. Low-level
+`FeatureSlot.open` returns a slot transition, including its initial outputs;
+prefer `FeatureBinding.open` to perform the parent integration automatically.
+
+### App-level subscriptions
+
+The App can inspect child state to decide which sources to subscribe to. This
+extends the example with Escape-to-go-back, enabled only while Work is displayed:
+
+```scala
+import org.scalajs.dom
+
+val keyboardProgram = program.copy(
+  subscriptions = model =>
+    Pages.work.event(model.page, Work.Msg.Back) match {
+      case None => Sub.Empty
+      case Some(back) =>
+        Sub.fromEvent[dom.KeyboardEvent, Msg]("keydown", dom.window) { event =>
+          Option.when(event.key == "Escape")(Msg.PageEvent(back))
+        }
+    }
+)
+```
+
+This source captures the current Work instance's address. Returning to Search
+removes its subscription from the App's declaration, so the existing Runtime
+stops the source. No feature-specific subscription machinery is involved.
+
+Keeping the same subscription ID keeps its existing stream, including its captured
+destination. If you replace a child directly, use an App-managed visit/revision
+in the subscription ID to rebind to the new address, or remove the ID in one
+update before adding it again. Reconstructing a stream under the same ID does not
+change its destination. Subscription IDs and debounce keys remain shared within
+a Runtime; the App must choose non-conflicting names for independent operations.
+
+### Instance replacement and asynchronous results
+
+Opening a slot always creates a new instance, including when reopening the same
+variant with the same input. A generation in the slot state distinguishes its
+visits. Use `clear` to empty an existing slot while retaining its generation;
+`empty` is only the initial state, not a way to reset an existing slot.
+
+```mermaid
+flowchart LR
+  old["Old child starts Cmd"] --> work["IO continues running"]
+  old --> replace["Clear or replace slot"]
+  replace --> current["Empty slot or new generation"]
+  work -- "result Msg" --> check["Slot checks generation and variant"]
+  current --> check
+  check -- "old address" --> discard["Ignore: no state change, Cmd or Out"]
+  check -- "current address" --> update["Child update"]
+```
+
+Commands are ordinary Cmd values, mapped into parent messages with `map` and
+combined with `++`. Runtime does not know about Features. Each slot validates its
+message destination immediately before calling the child's update. Nested slots
+validate at each level, so replacing an ancestor also makes its previous
+messages ineffective. Stale child messages do not fall through to the parent's
+update. They can still pass through the normal Runtime rendering loop.
+
+Clearing or replacing a child does **not** cancel running commands or pending
+debounce waits. They can complete and perform external writes; only their stale
+result messages are ignored. Even if an initial output immediately closes the
+child, its generated commands still execute. Application shutdown retains the
+existing Runtime behavior of canceling commands and subscriptions and awaiting
+cleanup. These are App lifetime guarantees, not child lifetime guarantees.
+
+Debounce semantics are unchanged: a new command with the same key replaces a
+pending wait across the entire Runtime, but does not cancel already started work.
+Hiding a view does not remove the child state, invalidate its address, or change
+subscriptions unless the App's subscription function explicitly does so.
+
+Instance identity only protects against messages from previous instances. Two
+requests within the **same** search instance still need an application-level
+request serial or another explicit ordering policy. The multipage Search keeps
+its `requestSerial` for this reason.
+
+For HTTP requests and URL routing, see the
+[Multipage example](examples/multipage/src/main/scala/multipage/Main.scala):
+`Pages` is the slot that switches between Search and Work pages.
+Search emits `QueryChanged` and `OpenWork`,
+and Main owns URL changes. The example's former `pageSerial` and manual child
+message routing are handled by the feature connection.
+
 ## Routing
 
 Routing connects the browser URL to application state, such as which page to

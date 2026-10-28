@@ -1,162 +1,84 @@
 package multipage
 
-import scala.util.chaining.*
-
 import scala.scalajs.LinkingInfo
 import org.scalajs.dom
 import org.scalajs.dom.URL
-
 import slinky.core.facade.ReactElement
 import slinky.hot
 import slinky.web.html.*
-
+import fui.*
 import fui.router.*
-
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 
-import fui.*
-
 object Main {
-
-  //
-  // ROUTE
-  //
-
   object Route {
     val search = Root
     val searchWithQuery = Root & Param[String]("query")
     val work = Root / "work" / Arg[String]()
   }
 
-  //
-  // MODEL
-  //
-
-  case class Model(currentPage: Page, pageSerial: Long = 0) {
-    def setPage(page: Page): Model =
-      this.copy(currentPage = page)
+  object Pages extends FeatureSlot {
+    val search = variant(page.Search)
+    val work = variant(page.Work)
   }
 
-  enum Page {
-    case NotFoundPage
-    case SearchPage(pageModel: page.Search.Model)
-    case WorkPage(pageModel: page.Work.Model)
-  }
-
-  export Page.*
-
-  def init(url: URL): (Model, Cmd[Msg]) =
-    applyUrlChange(url, Model(NotFoundPage))
-
-  //
-  // UPDATE
-  //
+  case class Model(page: Pages.State = Pages.empty)
 
   enum Msg {
     case UrlChanged(url: URL)
-    case SearchPageMsg(pageSerial: Long, pageMsg: page.Search.Msg)
-    case WorkPageMsg(pageSerial: Long, pageMsg: page.Work.Msg)
+    case PageEvent(event: Pages.Event)
   }
 
-  export Msg.*
+  val pageBinding = Pages.bind[Model, Msg, Nothing](
+    state = _.page,
+    replace = (model, value) => model.copy(page = value),
+    wrap = Msg.PageEvent.apply,
+    extract = {
+      case Msg.PageEvent(event) => Some(event)
+      case _ => None
+    },
+    onOutput = (output, model) => output match {
+      case Pages.search.output(page.Search.Out.QueryChanged(query)) =>
+        val url = if (query.isBlank) Route.search.url(()) else Route.searchWithQuery.url(query)
+        Transition(model, Cmd.exec(IO.fromEither(url).flatMap(Browser.replaceUrl)))
+      case Pages.search.output(page.Search.Out.OpenWork(id)) =>
+        Transition(model, Cmd.exec(IO.fromEither(Route.work.url(id)).flatMap(url => Browser.pushUrl(url))))
+      case _ => Transition.unchanged(model)
+    }
+  )
 
-  def update(msg: Msg, model: Model): (Model, Cmd[Msg]) =
-    (msg, model.currentPage) match {
-      case (UrlChanged(url), _) =>
-        applyUrlChange(url, model)
+  def init(url: URL): Transition[Model, Msg, Nothing] = applyUrlChange(url, Model())
 
-      case (SearchPageMsg(serial, pageMsg), SearchPage(pageModel)) if serial == model.pageSerial =>
-        applyPageUpdate(
-          page.Search.update(pageMsg, pageModel),
-          SearchPage.apply,
-          SearchPageMsg(model.pageSerial, _),
-          model
-        )
-
-      case (WorkPageMsg(serial, pageMsg), WorkPage(pageModel)) if serial == model.pageSerial =>
-        applyPageUpdate(
-          page.Work.update(pageMsg, pageModel),
-          WorkPage.apply,
-          WorkPageMsg(model.pageSerial, _),
-          model
-        )
-
-      case _ => (model, Cmd.none)
+  def applyUrlChange(url: URL, model: Model): Transition[Model, Msg, Nothing] =
+    (url.pathname + url.search + url.hash) match {
+      case Route.searchWithQuery(query) => pageBinding.open(model, Pages.search, query)
+      case Route.search(_) => pageBinding.open(model, Pages.search, "")
+      case Route.work(id) => pageBinding.open(model, Pages.work, id)
+      case _ => pageBinding.clear(model)
     }
 
-  def applyUrlChange(url: URL, model: Model): (Model, Cmd[Msg]) = {
-    // Each visit owns its commands, including revisits to the same URL.
-    val nextModel = model.copy(pageSerial = model.pageSerial + 1)
-    url.pathname + url.search + url.hash match {
-      case Route.searchWithQuery(q) =>
-        applyPageUpdate(page.Search.init(q), SearchPage.apply, SearchPageMsg(nextModel.pageSerial, _), nextModel)
-
-      case Route.search(_) =>
-        applyPageUpdate(page.Search.init(), SearchPage.apply, SearchPageMsg(nextModel.pageSerial, _), nextModel)
-
-      case Route.work(id) =>
-        applyPageUpdate(page.Work.init(id), WorkPage.apply, WorkPageMsg(nextModel.pageSerial, _), nextModel)
-
-      case _ =>
-        (nextModel.copy(currentPage = NotFoundPage), Cmd.none)
-    }
+  private def update(msg: Msg, model: Model): Transition[Model, Msg, Nothing] = msg match {
+    case Msg.UrlChanged(url) => applyUrlChange(url, model)
+    case Msg.PageEvent(_) => Transition.unchanged(model)
   }
 
-  def applyPageUpdate[PageModel, PageMsg](
-      pageUpdate: (PageModel, Cmd[PageMsg]),
-      wrapModel: PageModel => Page,
-      applyMsg: PageMsg => Msg,
-      model: Model
-  ): (Model, Cmd[Msg]) = {
-    val (pageModel, pageCmd) = pageUpdate
-    (
-      wrapModel(pageModel).pipe(model.setPage(_)),
-      pageCmd.map(applyMsg)
-    )
-  }
-
-  //
-  // VIEW
-  //
-
-  def view(model: Model, dispatch: Msg => Unit): ReactElement = {
-    def mapDispatch[SubMsg](wrap: SubMsg => Msg) =
-      (subMsg: SubMsg) => dispatch(wrap(subMsg))
-
+  def view(model: Model, dispatch: Msg => Unit): ReactElement =
     div(className := "app")(
       div(className := "app-header")(),
-      model.currentPage match {
-        case NotFoundPage =>
-          div(className := "page-not-found")("Page Not Found")
-
-        case SearchPage(pageModel) =>
-          page.Search.view(pageModel, mapDispatch(SearchPageMsg(model.pageSerial, _)))
-
-        case WorkPage(pageModel) =>
-          page.Work.view(pageModel, mapDispatch(WorkPageMsg(model.pageSerial, _)))
-      }
+      pageBinding.view(model, dispatch, div(className := "page-not-found")("Page Not Found"))
     )
-  }
 
-  def main(args: Array[String]): Unit =
-    run.unsafeRunAndForget()
+  val program = FeatureProgram(
+    init = init,
+    update = update,
+    view = view,
+    onUrlChange = Some(Msg.UrlChanged.apply)
+  ).withFeatures(pageBinding).program
+
+  def main(args: Array[String]): Unit = run.unsafeRunAndForget()
 
   def run: IO[Unit] =
-    IO {
-      if (LinkingInfo.developmentMode) {
-        hot.initialize()
-      }
-    } *> {
-      Browser.run(
-        dom.document.getElementById("app"),
-        Program(
-          init,
-          view,
-          update,
-          (_: Model) => Sub.Empty,
-          Some(UrlChanged(_))
-        )
-      )
-    }
+    IO { if (LinkingInfo.developmentMode) hot.initialize() } *>
+      Browser.run(dom.document.getElementById("app"), program)
 }

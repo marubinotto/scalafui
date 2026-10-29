@@ -16,7 +16,7 @@ import slinky.web.html.*
 
 import cats.effect.unsafe.implicits.global
 
-import fui.*
+import marubinotto.fui.*
 
 object Main {
 

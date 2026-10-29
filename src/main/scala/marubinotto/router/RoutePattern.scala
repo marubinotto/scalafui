@@ -1,4 +1,4 @@
-package fui.router
+package marubinotto.router
 
 import scala.annotation.unused
 import scala.scalajs.js.URIUtils

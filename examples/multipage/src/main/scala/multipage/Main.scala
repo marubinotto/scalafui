@@ -6,8 +6,8 @@ import org.scalajs.dom.URL
 import slinky.core.facade.ReactElement
 import slinky.hot
 import slinky.web.html.*
-import fui.*
-import fui.router.*
+import marubinotto.fui.*
+import marubinotto.router.*
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 

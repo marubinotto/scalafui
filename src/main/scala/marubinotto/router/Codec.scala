@@ -1,4 +1,4 @@
-package fui.router
+package marubinotto.router
 
 trait Codec[A] {
   def encode(value: A): Option[String]

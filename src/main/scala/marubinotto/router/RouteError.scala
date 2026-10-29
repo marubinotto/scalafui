@@ -1,4 +1,4 @@
-package fui.router
+package marubinotto.router
 
 /** Failures produced while rendering a route as a URL. */
 sealed abstract class RouteError(message: String, cause: Throwable = null)

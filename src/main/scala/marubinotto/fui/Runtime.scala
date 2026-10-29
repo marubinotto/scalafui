@@ -1,4 +1,4 @@
-package fui
+package marubinotto.fui
 
 import scala.collection.mutable.Map as MutableMap
 import scala.scalajs.js

@@ -2,7 +2,7 @@ package multipage
 
 import cats.effect.{IO, Resource}
 import cats.effect.unsafe.implicits.global
-import fui.Browser
+import marubinotto.fui.Browser
 import multipage.page.Search
 import org.scalajs.dom
 import org.scalatest.funsuite.AsyncFunSuite

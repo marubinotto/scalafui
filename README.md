@@ -23,7 +23,7 @@ import slinky.web.html._
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 
-import fui._
+import marubinotto.fui._
 
 object Main {
 
@@ -272,14 +272,14 @@ fetches data; the command's result becomes a new message that updates the state.
 Compose effects with Cats Effect `IO`, then choose how to notify the application:
 
 - `.toCmd` emits the computed value as a message. It is available through
-  `import fui.*`; there is no implicit conversion.
+  `import marubinotto.fui.*`; there is no implicit conversion.
 - `Cmd.exec(io)` runs the effect without emitting a message.
 - `Cmd.optional(io)` emits a message only when the result is `Some(message)`.
 - `Cmd.none` is an empty batch of commands.
 
 ```scala
 import cats.effect.IO
-import fui.*
+import marubinotto.fui.*
 import scala.concurrent.duration.*
 
 case class SearchCompleted(result: String)
@@ -336,7 +336,7 @@ the current Model. Unlike a command, a subscription can keep producing messages
 across many updates.
 
 ```scala
-import fui.*
+import marubinotto.fui.*
 import scala.concurrent.duration.*
 
 case class Model(running: Boolean)
@@ -360,7 +360,7 @@ Compose resources to safely register multiple sources:
 
 ```scala
 import cats.effect.{IO, Resource}
-import fui.*
+import marubinotto.fui.*
 
 def externalSources[Msg](
     registerFirst: (Msg => Unit) => (() => Unit),
@@ -384,7 +384,7 @@ waits for acquisition to finish and then runs cleanup.
 
 ```scala
 import cats.effect.{IO, Resource}
-import fui.*
+import marubinotto.fui.*
 
 def externalEvents[Msg](register: (Msg => Unit) => (() => Unit)): Sub[Msg] =
   Sub.fromResource[Msg]("external-events") { emit =>
@@ -428,7 +428,7 @@ For an application-defined `program` and DOM `container`, the startup pattern is
 
 ```scala
 import cats.effect.IO
-import fui.*
+import marubinotto.fui.*
 
 val run: IO[Unit] =
   Browser.run(container, program)
@@ -491,7 +491,7 @@ The other Browser helpers provide browser effects as lazy `IO` values. Compose
 them first, then convert to commands when returning work from `init` or `update`:
 
 ```scala
-import fui.*
+import marubinotto.fui.*
 
 case class DraftLoaded(value: Option[String])
 
@@ -586,7 +586,7 @@ HTTP or routing code. Search emits a selection; Work displays it and emits a
 request to go back.
 
 ```scala
-import fui.*
+import marubinotto.fui.*
 import slinky.web.html.*
 
 val catalog = Map("one" -> "Functional UI", "two" -> "Learning Scala")
@@ -803,12 +803,12 @@ message routing are handled by the feature connection.
 ## Routing
 
 Routing connects the browser URL to application state, such as which page to
-show. Scalafui includes `fui.router`, a modified version of
+show. Scalafui includes `marubinotto.router`, a modified version of
 [trail](https://github.com/sparsetech/trail), for matching and generating URLs.
 The application decides what each route means for its Model.
 
 ```scala
-import fui.router.*
+import marubinotto.router.*
 
 val search = Root & Param[String]("query")
 val work = Root / "work" / Arg[String]()
@@ -857,7 +857,7 @@ explicitly or lift the result into IO before navigating:
 
 ```scala
 import cats.effect.IO
-import fui.*
+import marubinotto.fui.*
 
 val openWork = Cmd.exec(
   IO.fromEither(work.url("123")).flatMap(url => Browser.pushUrl(url))

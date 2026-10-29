@@ -4,7 +4,7 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import scala.concurrent.duration.*
 import org.scalatest.funsuite.AsyncFunSuite
-import fui.Sub
+import marubinotto.fui.Sub
 import Game.*
 import Main.*
 

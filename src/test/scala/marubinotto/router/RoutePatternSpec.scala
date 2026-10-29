@@ -1,4 +1,4 @@
-package fui.router
+package marubinotto.router
 
 import org.scalatest.funsuite.AnyFunSuite
 

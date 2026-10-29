@@ -1,4 +1,4 @@
-package fui
+package marubinotto.fui
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration

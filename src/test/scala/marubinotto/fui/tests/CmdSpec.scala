@@ -1,8 +1,8 @@
-package fui.tests
+package marubinotto.fui.tests
 
 import cats.effect.{Deferred, IO, Outcome, Ref}
 import cats.effect.unsafe.implicits.global
-import fui.*
+import marubinotto.fui.*
 import org.scalatest.funsuite.AsyncFunSuite
 import scala.concurrent.Future
 import scala.concurrent.duration.*

@@ -2,7 +2,7 @@ package fuidungeon
 
 import cats.effect.unsafe.implicits.global
 import org.scalatest.funsuite.AsyncFunSuite
-import fui.Cmd
+import marubinotto.fui.Cmd
 import Game.*
 import Main.*
 

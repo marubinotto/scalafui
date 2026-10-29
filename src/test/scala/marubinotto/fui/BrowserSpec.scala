@@ -1,4 +1,4 @@
-package fui
+package marubinotto.fui
 
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*

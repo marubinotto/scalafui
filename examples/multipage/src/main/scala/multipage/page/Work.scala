@@ -5,7 +5,7 @@ import scala.scalajs.js
 import slinky.core.facade.ReactElement
 import slinky.web.html.*
 
-import fui.*
+import marubinotto.fui.*
 
 import multipage.domain
 import multipage.Server

@@ -4,7 +4,7 @@ import scala.concurrent.duration.*
 import slinky.core.facade.ReactElement
 import slinky.web.html.*
 
-import fui.*
+import marubinotto.fui.*
 import cats.effect.IO
 
 import multipage.domain

@@ -1,4 +1,4 @@
-package fui
+package marubinotto.fui
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalajs.dom.URL
@@ -112,19 +112,19 @@ class FeatureSpec extends AnyFunSuite {
 
   test("slot addresses, states, variants and inputs are statically distinct") {
     assertDoesNotCompile("""
-      import fui.FeatureExamples.*
+      import marubinotto.fui.FeatureExamples.*
       def wrong(event: Left.Event): Right.Event = event
     """)
     assertDoesNotCompile("""
-      import fui.FeatureExamples.*
+      import marubinotto.fui.FeatureExamples.*
       Left.open(Left.empty, Right.counter, 1)
     """)
     assertDoesNotCompile("""
-      import fui.FeatureExamples.*
+      import marubinotto.fui.FeatureExamples.*
       Left.open(Left.empty, Left.counter, "wrong input")
     """)
     assertDoesNotCompile("""
-      import fui.FeatureExamples.*
+      import marubinotto.fui.FeatureExamples.*
       left.open(Model(), Right.counter, 1)
     """)
   }

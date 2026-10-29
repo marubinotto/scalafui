@@ -2,7 +2,7 @@ package multipage
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalajs.dom.URL
-import fui.Transition
+import marubinotto.fui.Transition
 import multipage.page.{Search, Work}
 
 class ResponseIdentitySpec extends AnyFunSuite {

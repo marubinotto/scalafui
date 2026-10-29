@@ -1,4 +1,4 @@
-package fui
+package marubinotto.fui
 
 import cats.effect.{Deferred, IO, Resource}
 import cats.effect.std.Queue

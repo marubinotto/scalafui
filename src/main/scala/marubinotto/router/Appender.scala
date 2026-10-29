@@ -1,4 +1,4 @@
-package fui.router
+package marubinotto.router
 
 trait Appender[A, B, Out] {
   def append(left: A, right: B): Out

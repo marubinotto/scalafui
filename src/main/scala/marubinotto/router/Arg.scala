@@ -1,4 +1,4 @@
-package fui.router
+package marubinotto.router
 
 final class Arg[A] private[router] ()
 

@@ -4,7 +4,7 @@ import io.circe.*
 
 import scala.scalajs.js.URIUtils
 
-import fui.*
+import marubinotto.fui.*
 import cats.effect.IO
 
 import multipage.domain.Work

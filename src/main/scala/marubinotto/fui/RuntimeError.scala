@@ -1,4 +1,4 @@
-package fui
+package marubinotto.fui
 
 import cats.effect.IO
 import org.scalajs.dom

@@ -9,7 +9,7 @@ import org.scalajs.dom.URL
 import slinky.core.facade.ReactElement
 import slinky.hot
 import slinky.web.html.*
-import fui.*
+import marubinotto.fui.*
 import Game.*
 
 object Main {

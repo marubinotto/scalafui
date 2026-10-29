@@ -1,7 +1,7 @@
 package fuidungeon
 
 import org.scalatest.funsuite.AnyFunSuite
-import fui.Sub
+import marubinotto.fui.Sub
 import Game.*
 import Main.*
 

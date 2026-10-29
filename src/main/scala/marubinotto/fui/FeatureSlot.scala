@@ -107,11 +107,8 @@ abstract class FeatureSlot {
       state.entry.exists(e => e.variant eq event.variant)
 
   private[fui] def update(event: Event, state: State): Transition[State, Event, Output] =
-    if (accepts(event, state)) {
-      val next = state.entry.get.update(event, state.generation)
-      // Preserve the state when a nested slot ignores a stale message.
-      if (next.model.entry.get.model == state.entry.get.model) next.copy(model = state)
-      else next
-    } else Transition.unchanged(state)
+    if (accepts(event, state))
+      state.entry.get.update(event, state.generation)
+    else Transition.unchanged(state)
 
 }

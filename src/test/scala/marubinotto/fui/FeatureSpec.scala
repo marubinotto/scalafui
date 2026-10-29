@@ -103,7 +103,28 @@ class FeatureSpec extends AnyFunSuite {
     val container = Container.open(Container.empty, Container.item, changedInner).model
     val staleInner = Msg.LeftEvent(Left.counter.event(current.left, 999).get)
     val addressed = Container.item.event(container, staleInner).get
-    assert(Container.update(addressed, container) == Transition.unchanged(container))
+    val ignored = Container.update(addressed, container)
+    assert(Container.item.model(ignored.model).contains(changedInner))
+    assert(ignored.cmd == Cmd.none)
+    assert(ignored.outputs.isEmpty)
+  }
+
+  test("updates retain new models even when equality ignores a changed field") {
+    case class PartialModel(id: Int)(val text: String)
+    val before = PartialModel(1)("before")
+    val after = PartialModel(1)("after")
+    assert(before == after)
+    object Slot extends FeatureSlot {
+      val item = variant(new Feature[Unit, PartialModel, Unit, Nothing] {
+        def init(input: Unit): Transition[PartialModel, Unit, Nothing] = Transition(before)
+        def update(msg: Unit, model: PartialModel): Transition[PartialModel, Unit, Nothing] =
+          Transition(after)
+        def view(model: PartialModel, dispatch: Unit => Unit) = div(model.text)
+      })
+    }
+    val initial = Slot.open(Slot.empty, Slot.item, ()).model
+    val next = Slot.update(Slot.item.event(initial, ()).get, initial)
+    assert(Slot.item.model(next.model).get.text == "after")
   }
 
   test("a slot cannot be registered twice in the same parent") {

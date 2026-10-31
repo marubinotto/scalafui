@@ -532,42 +532,23 @@ A feature can represent a page, an editor pane, a search panel, or a dialog.
 Keep presentation-only components as ordinary view functions. Use a feature when
 a part of the application has its own state transitions or work to manage.
 
-### Definitions, instances, and slots
+### Definitions, registrations, and coexistence
 
-- A **Feature** defines initialization, updates, and rendering. It
-  can be reused without sharing state.
-- An **instance** is one use of that definition, with its own Model and message address.
-- A **FeatureSlot** is a logical position in the parent's state that contains at most
-  one instance. It can be empty or contain one of its registered variants. It is
-  not a DOM location and has no dependency on routing.
+- A **Feature** defines initialization, updates, and rendering. It can be reused
+  without sharing state.
+- A **FeatureSet** declares named children with `child(feature)`. Each registration
+  holds at most one active instance; registering the same Feature twice gives two
+  independent children.
+- A **policy** describes coexistence separately from registration. Children coexist
+  by default. Each `exclusive(a, b, ...)` group permits at most one active member;
+  different groups can be active simultaneously.
+- A **FeatureBinding** connects the set's state, events, and outputs to its parent,
+  and applies the supplied policy when opening children.
 
 All child Models remain in the parent's state tree. One Runtime processes the
-messages; creating children does not create additional stores or message loops.
-Multiple slots can be active simultaneously, and features can contain more slots.
-
-```mermaid
-flowchart TD
-  app["App: parent update and Out handlers"]
-  subgraph model["Parent Model"]
-    searchState["Search slot + child Model"]
-    editorState["Editor slot + child Model"]
-  end
-  search["Search Feature"]
-  editor["Editor Feature"]
-  subs["App subscriptions: Model to Sub"]
-  runtime["Unchanged Runtime: Msg queue, Cmd and Sub execution"]
-  app -- "open / clear / update" --> model
-  searchState -- "Model" --> search
-  editorState -- "Model" --> editor
-  search -- "Out" --> app
-  editor -- "Out" --> app
-  model --> subs
-  subs --> runtime
-  search -- "ordinary Cmd" --> runtime
-  editor -- "ordinary Cmd" --> runtime
-  runtime -- "Msg via slot address check" --> search
-  runtime -- "Msg via slot address check" --> editor
-```
+messages; children do not create additional stores or message loops. Definitions
+and bindings are stable values, not mutable stores. Features can contain nested
+FeatureSets. Neither the set nor its policy determines DOM placement or display order.
 
 ### Defining a feature
 
@@ -637,21 +618,17 @@ object Work extends Feature[String, String, Work.Msg, Work.Out] {
 
 ### Connecting a child to its parent
 
-Register variants in a stable slot definition. Each slot has its own `State`,
-`Event`, and `Output` types; events from a different slot cannot be passed to it.
-Use separate slot definitions for two independently active positions, even when
-both contain the same feature definition.
+Register children in a stable FeatureSet definition. Each set has its own `State`,
+`Event`, `Output`, `Child`, and `Policy` types. Children and policies from another
+set cannot be used in its binding.
 
-`bind` describes how to read and replace the slot state, wrap and extract its
-messages, and handle outputs. It returns a `FeatureBinding` connection. Register that
-connection with `withFeatures` so child updates and outputs are routed.
-Each `withFeatures` call accepts one binding, which connects all variants in its
-slot. Chain calls to compose multiple slots. A slot can be registered only once
-in a given parent.
+`bind` requires a policy and describes how to read and replace child state, wrap
+and extract messages, and handle outputs. Register the resulting connection with
+`withFeatures`. One binding connects all children in its set. You can chain calls
+for separate sets, but the same set can be bound only once in a given parent.
 
-The following connects both features through one binding. `Pages` holds either
-Search or Work, never both at once. The earlier diagram shows the alternative:
-separate slots for features displayed simultaneously.
+The following connects Search and Work with an explicit exclusive policy. Without
+that group (`Pages.policy()`), opening Work would retain Search's state too.
 
 The output handler is a method, so it can refer to `pageBinding` without evaluating
 it during binding construction. Returning to Search resets the query in this example:
@@ -659,9 +636,9 @@ it during binding construction. Returning to Search resets the query in this exa
 ```scala
 import org.scalajs.dom.URL
 
-object Pages extends FeatureSlot {
-  val search = variant(Search)
-  val work = variant(Work)
+object Pages extends FeatureSet {
+  val search = child(Search)
+  val work = child(Work)
 }
 
 case class Model(page: Pages.State = Pages.empty)
@@ -680,6 +657,7 @@ def onPageOutput(output: Pages.Output, model: Model): Transition[Model, Msg, Not
   }
 
 val pageBinding = Pages.bind[Model, Msg, Nothing](
+  policy = Pages.policy(Pages.exclusive(Pages.search, Pages.work)),
   state = _.page,
   replace = (model, page) => model.copy(page = page),
   wrap = Msg.PageEvent.apply,
@@ -693,18 +671,21 @@ val program = FeatureProgram[Model, Msg](
   init = (_: URL) => pageBinding.open(Model(), Pages.search, ""),
   update = (_, model) => Transition.unchanged(model),
   view = (model, dispatch) =>
-    pageBinding.view(model, dispatch, div("No page selected"))
+    if (Pages.search.model(model.page).isDefined)
+      pageBinding.view(model, Pages.search, dispatch, div())
+    else
+      pageBinding.view(model, Pages.work, dispatch, div("No page selected"))
 ).withFeatures(pageBinding).program
 ```
 
-The single `withFeatures(pageBinding)` call connects both registered variants.
+The single `withFeatures(pageBinding)` call connects both registered children.
 Selecting a search result emits `OpenWork(id)`; the parent opens Work. The Back
 button emits `Work.Out.Back`; the parent opens Search again.
 
 Pass the resulting `Program` to `Browser.run`, `Browser.mount`, or `Runtime.make`
 as usual. `FeatureProgram` also accepts `subscriptions` and `onUrlChange`.
 For nesting, attach a connection to a `Feature` with `withFeatures` and register the
-returned composed feature as a variant in its parent's slot.
+returned composed feature as a child in its parent's set.
 
 Child events are intercepted by the connection and do not also execute the
 parent's update. After updating the child, outputs are handled in list order,
@@ -714,11 +695,39 @@ transition is rendered once. An output handler can close or replace the child,
 but commands already generated by that transition still execute. Their results
 are ignored if the destination instance is no longer present.
 
-`FeatureBinding.open` and `FeatureBinding.clear` return parent transitions. When opening several
+`FeatureBinding.open`, `close(model, child)`, and `clear(model)` return parent transitions.
+`close` removes only the specified child; `clear` removes all children in the set. When opening several
 children in one transition, pass each resulting Model to the next operation and
 combine their commands with `++`; do not discard earlier commands. Low-level
-`FeatureSlot.open` returns a slot transition, including its initial outputs;
+`FeatureSet.open(state, child, input, policy)` returns a set transition, including its initial outputs;
 prefer `FeatureBinding.open` to perform the parent integration automatically.
+
+### Multiple independent exclusive groups
+
+A set can mix concurrent children with any number of independent exclusive groups:
+
+```scala
+object AppFeatures extends FeatureSet {
+  val primarySearch = child(Search)
+  val primaryWork = child(Work)
+  val secondarySearch = child(Search)
+  val secondaryWork = child(Work)
+  val sidebarSearch = child(Search)
+}
+
+val coexistence = AppFeatures.policy(
+  AppFeatures.exclusive(AppFeatures.primarySearch, AppFeatures.primaryWork),
+  AppFeatures.exclusive(AppFeatures.secondarySearch, AppFeatures.secondaryWork)
+)
+```
+
+Pass `coexistence` to `AppFeatures.bind`. Opening `primaryWork` closes only
+`primarySearch`; it does not affect the secondary group or `sidebarSearch`.
+Unlisted children coexist, so no `concurrent` declaration is needed.
+Groups with fewer than two children, duplicate children, or overlapping membership
+are rejected when constructing the group/policy. Policies do not change during a
+binding's lifetime. Each `view` call names the child to render; render multiple
+children to display them together, and choose layout and order in the parent.
 
 ### App-level subscriptions
 
@@ -753,25 +762,27 @@ a Runtime; the App must choose non-conflicting names for independent operations.
 
 ### Instance replacement and asynchronous results
 
-Opening a slot always creates a new instance, including when reopening the same
-variant with the same input. A generation in the slot state distinguishes its
-visits. Use `clear` to empty an existing slot while retaining its generation;
-`empty` is only the initial state, not a way to reset an existing slot.
+Opening a child always creates a new instance, including when reopening the same
+child with the same input. State retains a generation for each child independently.
+An exclusive open removes its peers before installing the new child. Other groups
+and concurrent children's states and event addresses remain valid.
+Use `close` or `clear` on existing state to retain generation history; `empty` is
+only for initial state, never for resetting an existing set.
 
 ```mermaid
 flowchart LR
   old["Old child starts Cmd"] --> work["IO continues running"]
-  old --> replace["Clear or replace slot"]
-  replace --> current["Empty slot or new generation"]
-  work -- "result Msg" --> check["Slot checks generation and variant"]
+  old --> replace["Close or replace child"]
+  replace --> current["Inactive child or new generation"]
+  work -- "result Msg" --> check["FeatureSet checks child and generation"]
   current --> check
   check -- "old address" --> discard["Ignore: no state change, Cmd or Out"]
   check -- "current address" --> update["Child update"]
 ```
 
 Commands are ordinary Cmd values, mapped into parent messages with `map` and
-combined with `++`. Runtime does not know about Features. Each slot validates its
-message destination immediately before calling the child's update. Nested slots
+combined with `++`. Runtime does not know about Features. Each set validates its
+message destination immediately before calling the child's update. Nested sets
 validate at each level, so replacing an ancestor also makes its previous
 messages ineffective. Stale child messages do not fall through to the parent's
 update. They can still pass through the normal Runtime rendering loop.
@@ -795,10 +806,27 @@ its `requestSerial` for this reason.
 
 For HTTP requests and URL routing, see the
 [Multipage example](examples/multipage/src/main/scala/multipage/Main.scala):
-`Pages` is the slot that switches between Search and Work pages.
+`Pages` registers Search and Work, and its policy makes them mutually exclusive.
 Search emits `QueryChanged` and `OpenWork`,
 and Main owns URL changes. The example's former `pageSerial` and manual child
 message routing are handled by the feature connection.
+
+### Migrating from FeatureSlot
+
+This is a breaking API change; no compatibility wrapper is provided.
+
+- Replace `extends FeatureSlot` with `extends FeatureSet` and `variant(feature)`
+  with `child(feature)`. Typed references are now `Child[I, M, E, O]`.
+- Supply `policy` explicitly to `bind`. To preserve the old replacement behavior
+  for two or more children, put them all in one `exclusive` group. For one child,
+  use `policy()`; reopening that child still replaces its instance.
+- Combine formerly separate slots into one set if desired. Leave their children
+  ungrouped to preserve independence and use one parent state/event/binding.
+- Pass a child to `binding.view(model, child, dispatch, empty)`. Use
+  `binding.close(model, child)` for individual removal and `binding.clear(model)`
+  for all children. Low-level `open` now requires an explicit policy too.
+- `FeatureBinding.features` replaces `slot`. Do not reset existing state to `empty`.
+- `Feature`, `Transition`, `FeatureProgram`, and Runtime execution semantics are unchanged.
 
 ## Routing
 

@@ -21,29 +21,29 @@ trait Feature[Input, Model, Msg, Out] { self =>
   def update(msg: Msg, model: Model): Transition[Model, Msg, Out]
   def view(model: Model, dispatch: Msg => Unit): ReactElement
 
-  private[fui] def featureSets: Set[FeatureSet] = Set.empty
+  private[fui] def childFeatureGroups: Set[ChildFeatures] = Set.empty
 
   final def withFeatures(
       child: FeatureBinding[Model, Msg, Out]
   ): Feature[Input, Model, Msg, Out] = {
     require(
-      !featureSets.contains(child.features),
-      "A FeatureSet can only be bound once within a feature"
+      !childFeatureGroups.contains(child.features),
+      "A ChildFeatures group can only be bound once within a feature"
     )
     new Feature[Input, Model, Msg, Out] {
       def init(input: Input) = self.init(input)
       def update(msg: Msg, model: Model) =
         child.route(msg, model).getOrElse(self.update(msg, model))
       def view(model: Model, dispatch: Msg => Unit) = self.view(model, dispatch)
-      override private[fui] def featureSets = self.featureSets + child.features
+      override private[fui] def childFeatureGroups = self.childFeatureGroups + child.features
     }
   }
 }
 
-/** A typed connection between one FeatureSet and its parent's state/messages.
+/** A typed connection between one ChildFeatures group and its parent's state/messages.
   */
 trait FeatureBinding[Model, Msg, Out] {
-  val features: FeatureSet
+  val features: ChildFeatures
   protected def policy: features.Policy
   protected def state(model: Model): features.State
   protected def replace(model: Model, state: features.State): Model

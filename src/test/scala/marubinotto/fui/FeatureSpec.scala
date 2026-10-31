@@ -11,8 +11,8 @@ object FeatureExamples {
       Transition(model + msg, outputs = List(model + msg, msg))
     def view(model: Int, dispatch: Int => Unit) = div(model.toString)
   }
-  object Left extends FeatureSet { val counter = child(Counter) }
-  object Right extends FeatureSet { val counter = child(Counter) }
+  object Left extends ChildFeatures { val counter = child(Counter) }
+  object Right extends ChildFeatures { val counter = child(Counter) }
   case class Model(
       left: Left.State = Left.empty,
       right: Right.State = Right.empty,
@@ -107,8 +107,8 @@ class FeatureSpec extends AnyFunSuite {
     assert(Left.counter.model(next.model.left).isEmpty)
   }
 
-  test("nested FeatureSets reject events from a previous ancestor") {
-    object Outer extends FeatureSet { val counters = child(feature) }
+  test("nested ChildFeatures groups reject events from a previous ancestor") {
+    object Outer extends ChildFeatures { val counters = child(feature) }
     val first = Outer.open(Outer.empty, Outer.counters, (), Outer.policy())
     val inside = Outer.counters.model(first.model).get
     val childMsg = Msg.LeftEvent(Left.counter.event(inside.left, 1).get)
@@ -124,7 +124,7 @@ class FeatureSpec extends AnyFunSuite {
     )
     val changedInner = left.open(current, Left.counter, 20).model
     // Keep the outer visit, but replace an inner visit before its old message arrives.
-    object Container extends FeatureSet {
+    object Container extends ChildFeatures {
       val item = child(new Feature[Model, Model, Msg, Nothing] {
         def init(input: Model): Transition[Model, Msg, Nothing] =
           Transition(input)
@@ -151,7 +151,7 @@ class FeatureSpec extends AnyFunSuite {
     val before = PartialModel(1)("before")
     val after = PartialModel(1)("after")
     assert(before == after)
-    object Slot extends FeatureSet {
+    object Slot extends ChildFeatures {
       val item = child(new Feature[Unit, PartialModel, Unit, Nothing] {
         def init(input: Unit): Transition[PartialModel, Unit, Nothing] =
           Transition(before)
@@ -168,12 +168,12 @@ class FeatureSpec extends AnyFunSuite {
     assert(Slot.item.model(next.model).get.text == "after")
   }
 
-  test("a FeatureSet cannot be registered twice in the same parent") {
+  test("a ChildFeatures group cannot be registered twice in the same parent") {
     intercept[IllegalArgumentException](feature.withFeatures(left))
   }
 
   test(
-    "FeatureSet addresses, states, children and inputs are statically distinct"
+    "ChildFeatures addresses, states, children and inputs are statically distinct"
   ) {
     assertDoesNotCompile("""
       import marubinotto.fui.FeatureExamples.*

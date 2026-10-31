@@ -3,7 +3,7 @@ package marubinotto.fui
 import org.scalatest.funsuite.AnyFunSuite
 import slinky.web.html.div
 
-object FeatureSetExamples {
+object ChildFeaturesExamples {
   object Count extends Feature[Int, Int, Int, Int] {
     def init(input: Int) = Transition(input, outputs = List(input))
     def update(msg: Int, model: Int) =
@@ -16,7 +16,7 @@ object FeatureSetExamples {
       Transition(model + msg, outputs = List(msg))
     def view(model: String, dispatch: String => Unit) = div(model)
   }
-  object Children extends FeatureSet {
+  object Children extends ChildFeatures {
     val a = child(Count)
     val b = child(Count)
     val c = child(Count)
@@ -52,8 +52,8 @@ object FeatureSetExamples {
   )
 }
 
-class FeatureSetSpec extends AnyFunSuite {
-  import FeatureSetExamples.*
+class ChildFeaturesSpec extends AnyFunSuite {
+  import ChildFeaturesExamples.*
 
   test(
     "default policy keeps differently typed children independent through one binding"
@@ -155,26 +155,26 @@ class FeatureSetSpec extends AnyFunSuite {
     "foreign children and policies, wrong inputs and messages are rejected statically"
   ) {
     assertDoesNotCompile("""
-      import marubinotto.fui.FeatureSetExamples.*
-      object Foreign extends marubinotto.fui.FeatureSet { val a = child(Count) }
+      import marubinotto.fui.ChildFeaturesExamples.*
+      object Foreign extends marubinotto.fui.ChildFeatures { val a = child(Count) }
       Children.exclusive(Children.a, Foreign.a)
     """)
     assertDoesNotCompile("""
-      import marubinotto.fui.FeatureSetExamples.*
-      object Foreign extends marubinotto.fui.FeatureSet { val a = child(Count) }
+      import marubinotto.fui.ChildFeaturesExamples.*
+      object Foreign extends marubinotto.fui.ChildFeatures { val a = child(Count) }
       Children.policy(Foreign.exclusive(Foreign.a, Foreign.a))
     """)
     assertDoesNotCompile("""
-      import marubinotto.fui.FeatureSetExamples.*
-      object Foreign extends marubinotto.fui.FeatureSet
+      import marubinotto.fui.ChildFeaturesExamples.*
+      object Foreign extends marubinotto.fui.ChildFeatures
       binding(Foreign.policy())
     """)
     assertDoesNotCompile("""
-      import marubinotto.fui.FeatureSetExamples.*
+      import marubinotto.fui.ChildFeaturesExamples.*
       binding(rules).open(Model(), Children.a, "wrong")
     """)
     assertDoesNotCompile("""
-      import marubinotto.fui.FeatureSetExamples.*
+      import marubinotto.fui.ChildFeaturesExamples.*
       Children.text.event(Children.empty, 123)
     """)
   }
@@ -220,7 +220,7 @@ class FeatureSetSpec extends AnyFunSuite {
         callback = dispatch; div(model.toString)
       }
     }
-    object Views extends FeatureSet {
+    object Views extends ChildFeatures {
       val one = child(clickable); val two = child(clickable)
     }
     case class ViewModel(state: Views.State = Views.empty)

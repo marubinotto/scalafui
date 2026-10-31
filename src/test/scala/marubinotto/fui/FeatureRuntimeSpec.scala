@@ -45,7 +45,7 @@ class FeatureRuntimeSpec extends AsyncFunSuite {
       )
       def view(model: Int, dispatch: Int => Unit) = div(model.toString)
     }
-    object Content extends FeatureSet {
+    object Content extends ChildFeatures {
       val leaf = this.child(App.this.leaf); val peer = this.child(App.this.leaf)
     }
     case class Model(content: Content.State = Content.empty)

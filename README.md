@@ -536,7 +536,7 @@ a part of the application has its own state transitions or work to manage.
 
 - A **Feature** defines initialization, updates, and rendering. It can be reused
   without sharing state.
-- A **FeatureSet** declares named children with `child(feature)`. Each registration
+- A **ChildFeatures** group declares named children with `child(feature)`. Each registration
   holds at most one active instance; registering the same Feature twice gives two
   independent children.
 - A **policy** describes coexistence separately from registration. Children coexist
@@ -548,7 +548,7 @@ a part of the application has its own state transitions or work to manage.
 All child Models remain in the parent's state tree. One Runtime processes the
 messages; children do not create additional stores or message loops. Definitions
 and bindings are stable values, not mutable stores. Features can contain nested
-FeatureSets. Neither the set nor its policy determines DOM placement or display order.
+ChildFeatures groups. Neither the set nor its policy determines DOM placement or display order.
 
 ### Defining a feature
 
@@ -618,7 +618,7 @@ object Work extends Feature[String, String, Work.Msg, Work.Out] {
 
 ### Connecting a child to its parent
 
-Register children in a stable FeatureSet definition. Each set has its own `State`,
+Register children in a stable ChildFeatures definition. Each set has its own `State`,
 `Event`, `Output`, `Child`, and `Policy` types. Children and policies from another
 set cannot be used in its binding.
 
@@ -636,7 +636,7 @@ it during binding construction. Returning to Search resets the query in this exa
 ```scala
 import org.scalajs.dom.URL
 
-object Pages extends FeatureSet {
+object Pages extends ChildFeatures {
   val search = child(Search)
   val work = child(Work)
 }
@@ -699,7 +699,7 @@ are ignored if the destination instance is no longer present.
 `close` removes only the specified child; `clear` removes all children in the set. When opening several
 children in one transition, pass each resulting Model to the next operation and
 combine their commands with `++`; do not discard earlier commands. Low-level
-`FeatureSet.open(state, child, input, policy)` returns a set transition, including its initial outputs;
+`ChildFeatures.open(state, child, input, policy)` returns a set transition, including its initial outputs;
 prefer `FeatureBinding.open` to perform the parent integration automatically.
 
 ### Multiple independent exclusive groups
@@ -707,7 +707,7 @@ prefer `FeatureBinding.open` to perform the parent integration automatically.
 A set can mix concurrent children with any number of independent exclusive groups:
 
 ```scala
-object AppFeatures extends FeatureSet {
+object AppFeatures extends ChildFeatures {
   val primarySearch = child(Search)
   val primaryWork = child(Work)
   val secondarySearch = child(Search)
@@ -774,7 +774,7 @@ flowchart LR
   old["Old child starts Cmd"] --> work["IO continues running"]
   old --> replace["Close or replace child"]
   replace --> current["Inactive child or new generation"]
-  work -- "result Msg" --> check["FeatureSet checks child and generation"]
+  work -- "result Msg" --> check["ChildFeatures checks child and generation"]
   current --> check
   check -- "old address" --> discard["Ignore: no state change, Cmd or Out"]
   check -- "current address" --> update["Child update"]
@@ -815,7 +815,7 @@ message routing are handled by the feature connection.
 
 This is a breaking API change; no compatibility wrapper is provided.
 
-- Replace `extends FeatureSlot` with `extends FeatureSet` and `variant(feature)`
+- Replace `extends FeatureSlot` with `extends ChildFeatures` and `variant(feature)`
   with `child(feature)`. Typed references are now `Child[I, M, E, O]`.
 - Supply `policy` explicitly to `bind`. To preserve the old replacement behavior
   for two or more children, put them all in one `exclusive` group. For one child,

@@ -5,19 +5,19 @@ import slinky.core.facade.ReactElement
 /** Typed child registrations. Coexistence rules are supplied separately at
   * binding time.
   */
-abstract class FeatureSet {
-  final class State private[FeatureSet] (
-      private[FeatureSet] val generations: Map[AnyRef, Long],
-      private[FeatureSet] val entries: Map[AnyRef, Entry]
+abstract class ChildFeatures {
+  final class State private[ChildFeatures] (
+      private[ChildFeatures] val generations: Map[AnyRef, Long],
+      private[ChildFeatures] val entries: Map[AnyRef, Entry]
   )
-  final class Event private[FeatureSet] (
-      private[FeatureSet] val generation: Long,
-      private[FeatureSet] val child: AnyRef,
-      private[FeatureSet] val message: Any
+  final class Event private[ChildFeatures] (
+      private[ChildFeatures] val generation: Long,
+      private[ChildFeatures] val child: AnyRef,
+      private[ChildFeatures] val message: Any
   )
-  final class Output private[FeatureSet] (
-      private[FeatureSet] val child: AnyRef,
-      private[FeatureSet] val value: Any
+  final class Output private[ChildFeatures] (
+      private[ChildFeatures] val child: AnyRef,
+      private[ChildFeatures] val value: Any
   )
 
   /** Initial state only. close/clear retain generation history on existing
@@ -25,11 +25,11 @@ abstract class FeatureSet {
     */
   val empty: State = new State(Map.empty, Map.empty)
 
-  final class Exclusive private[FeatureSet] (
-      private[FeatureSet] val members: Set[AnyRef]
+  final class Exclusive private[ChildFeatures] (
+      private[ChildFeatures] val members: Set[AnyRef]
   )
-  final class Policy private[FeatureSet] (
-      private[FeatureSet] val peers: Map[AnyRef, Set[AnyRef]]
+  final class Policy private[ChildFeatures] (
+      private[ChildFeatures] val peers: Map[AnyRef, Set[AnyRef]]
   )
 
   final def exclusive(children: Child[?, ?, ?, ?]*): Exclusive = {
@@ -66,7 +66,7 @@ abstract class FeatureSet {
     def view(generation: Long, dispatch: Event => Unit): ReactElement
   }
 
-  final class Child[I, M, E, O] private[FeatureSet] (
+  final class Child[I, M, E, O] private[ChildFeatures] (
       feature: Feature[I, M, E, O]
   ) {
     child =>
@@ -84,7 +84,7 @@ abstract class FeatureSet {
         new Event(state.generations(child), child, msg)
       )
 
-    private[FeatureSet] def initialize(
+    private[ChildFeatures] def initialize(
         input: I,
         generation: Long,
         state: State
@@ -157,7 +157,7 @@ abstract class FeatureSet {
       wrap: Event => E,
       extract: E => Option[Event],
       onOutput: (Output, M) => Transition[M, E, O]
-  ): FeatureBinding[M, E, O] { val features: FeatureSet.this.type } = {
+  ): FeatureBinding[M, E, O] { val features: ChildFeatures.this.type } = {
     val rules = policy
     val get = state
     val set = replace
@@ -165,7 +165,7 @@ abstract class FeatureSet {
     val decode = extract
     val output = onOutput
     new FeatureBinding[M, E, O] {
-      val features: FeatureSet.this.type = FeatureSet.this
+      val features: ChildFeatures.this.type = ChildFeatures.this
       protected def policy = rules
       protected def state(model: M) = get(model)
       protected def replace(model: M, value: State) = set(model, value)

@@ -22,7 +22,7 @@ abstract class ChildFeatures[Context] {
       private[ChildFeatures] val value: Any
   )
 
-  /** Initial state only. close/clear retain generation history on existing
+  /** Initial state only. remove/clear retain generation history on existing
     * states.
     */
   val empty: State = new State(Map.empty, Map.empty)
@@ -152,7 +152,8 @@ abstract class ChildFeatures[Context] {
   ): Child[I, M, E, O] =
     new Child(feature)
 
-  final def open[I, M, E, O](
+  /** Initialize a fresh child generation, replacing its state and removing exclusive peers. */
+  final def init[I, M, E, O](
       state: State,
       child: Child[I, M, E, O],
       input: I,
@@ -167,7 +168,8 @@ abstract class ChildFeatures[Context] {
     child.initialize(input, generation, prepared, context)
   }
 
-  final def close(state: State, child: Child[?, ?, ?, ?]): State =
+  /** Remove child state while retaining generation history; running commands are not cancelled. */
+  final def remove(state: State, child: Child[?, ?, ?, ?]): State =
     new State(state.generations, state.entries - child)
 
   final def clear(state: State): State = new State(state.generations, Map.empty)
@@ -235,7 +237,7 @@ abstract class ChildFeatures[Context] {
       (out, model, _) => onOutput(out, model)
     )
 
-  final def open[I, M, E, O](
+  final def init[I, M, E, O](
       state: State,
       child: Child[I, M, E, O],
       input: I,
@@ -243,7 +245,7 @@ abstract class ChildFeatures[Context] {
   )(using
       unit: Unit =:= Context
   ): Transition[State, Event, Output] =
-    open(state, child, input, policy, unit(()))
+    init(state, child, input, policy, unit(()))
 
   final def view(
       state: State,

@@ -69,7 +69,7 @@ class FeatureContextSpec extends AnyFunSuite {
     )
     val feature = new Feature[Int, Context, Model, Msg, Nothing] {
       def init(input: Int, context: Context) =
-        binding.open(Model(), Children.count, input, context)
+        binding.init(Model(), Children.count, input, context)
       def update(
           msg: Msg,
           model: Model,
@@ -101,7 +101,7 @@ class FeatureContextSpec extends AnyFunSuite {
     assert(Children.count.model(next.children).contains(41))
     assert(next.log == List("27:reply"))
     val withLabel =
-      binding.open(next, Children.label, (), Context(0, "label")).model
+      binding.init(next, Children.label, (), Context(0, "label")).model
     assert(Children.label.model(withLabel.children).contains("label"))
   }
 
@@ -144,7 +144,7 @@ class FeatureContextSpec extends AnyFunSuite {
     val adapted = feature.contramapContext[Int](n => Context(n, "nested"))
     object Outer extends ChildFeatures[Int] { val inner = child(adapted) }
     val initial =
-      Outer.open(Outer.empty, Outer.inner, 0, Outer.policy(), 2).model
+      Outer.init(Outer.empty, Outer.inner, 0, Outer.policy(), 2).model
     val inner = Outer.inner.model(initial).get
     val msg = Msg(Children.count.event(inner.children, 1).get)
     val event = Outer.inner.event(initial, msg).get

@@ -71,12 +71,12 @@ class FeatureRuntimeSpec extends AsyncFunSuite {
       (_, m) => Transition(m.copy(content = Content.clear(m.content)))
     )
     val program = FeatureProgram[Model, Msg](
-      _ => child.open(Model(), Content.leaf, 1),
+      _ => child.init(Model(), Content.leaf, 1),
       (msg, m) =>
         msg match {
-          case Msg.Replace       => child.open(m, Content.leaf, 3)
-          case Msg.Close         => child.close(m, Content.leaf)
-          case Msg.OpenPeer      => child.open(m, Content.peer, 10)
+          case Msg.Replace       => child.init(m, Content.leaf, 3)
+          case Msg.Close         => child.remove(m, Content.leaf)
+          case Msg.OpenPeer      => child.init(m, Content.peer, 10)
           case Msg.Barrier(done) => Transition(m, Cmd.exec(done.complete(m)))
           case _ => throw new AssertionError("child message reached parent")
         },

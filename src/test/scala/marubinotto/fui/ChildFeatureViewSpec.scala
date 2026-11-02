@@ -78,7 +78,7 @@ class ChildFeatureViewSpec extends AsyncFunSuite {
       val second = child(feature)
     }
     val policy = Children.policy()
-    var state = Children.open(Children.empty, Children.first, 1, policy).model
+    var state = Children.init(Children.empty, Children.first, 1, policy).model
     var selected = Children.first
     val container = dom.document.getElementById("app")
     val root = ReactDOMClient.createRoot(container)
@@ -149,7 +149,7 @@ class ChildFeatureViewSpec extends AsyncFunSuite {
           view.edit()
           val node = view.node
           val oldDispatch = view.lastDispatch
-          view.state = view.Children.open(
+          view.state = view.Children.init(
             view.state,
             view.Children.first,
             1,
@@ -180,7 +180,7 @@ class ChildFeatureViewSpec extends AsyncFunSuite {
           view.draw()
           view.edit()
           val node = view.node
-          view.state = view.Children.open(
+          view.state = view.Children.init(
             view.state,
             view.Children.second,
             1,
@@ -205,7 +205,7 @@ class ChildFeatureViewSpec extends AsyncFunSuite {
       IO {
         val view = new View
         try {
-          view.state = view.Children.open(
+          view.state = view.Children.init(
             view.state,
             view.Children.second,
             2,
@@ -227,7 +227,7 @@ class ChildFeatureViewSpec extends AsyncFunSuite {
     }.unsafeToFuture()
   }
 
-  for (operation <- List("close", "clear")) {
+  for (operation <- List("remove", "clear")) {
     test(
       s"$operation and reopen remount even without an intervening empty render"
     ) {
@@ -238,10 +238,10 @@ class ChildFeatureViewSpec extends AsyncFunSuite {
             view.draw()
             view.edit()
             view.state =
-              if (operation == "close")
-                view.Children.close(view.state, view.Children.first)
+              if (operation == "remove")
+                view.Children.remove(view.state, view.Children.first)
               else view.Children.clear(view.state)
-            view.state = view.Children.open(
+            view.state = view.Children.init(
               view.state,
               view.Children.first,
               1,

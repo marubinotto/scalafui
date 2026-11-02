@@ -20,7 +20,7 @@ class FeatureBindingMessageSpec extends AsyncFunSuite {
 
   test("message wraps a typed child event without updating it") {
     val connected = binding(Children.policy())
-    val opened = connected.open(Model(), Children.a, 1).model
+    val opened = connected.init(Model(), Children.a, 1).model
     val message: Option[Msg] = connected.message(opened, Children.a, 2)
     assert(Children.a.model(opened.children).contains(1))
     val next = connected.route(message.get, opened).get.model
@@ -36,7 +36,7 @@ class FeatureBindingMessageSpec extends AsyncFunSuite {
     assert(connected.message(inactive, Children.a, 2).isEmpty)
     val command = connected.send(inactive, Children.a, 2)
     assert(command == Cmd.none)
-    val opened = connected.open(inactive, Children.a, 1).model
+    val opened = connected.init(inactive, Children.a, 1).model
     emitted(command).map { messages =>
       assert(messages.isEmpty)
       assert(Children.a.model(opened.children).contains(1))
@@ -47,7 +47,7 @@ class FeatureBindingMessageSpec extends AsyncFunSuite {
     "send emits one parent message and only routing performs the transition"
   ) {
     val connected = binding(Children.policy())
-    val opened = connected.open(Model(), Children.text, "hello").model
+    val opened = connected.init(Model(), Children.text, "hello").model
     val command: Cmd[Msg] = connected.send(opened, Children.text, "!")
     emitted(command).map { messages =>
       assert(messages.size == 1)
@@ -58,21 +58,21 @@ class FeatureBindingMessageSpec extends AsyncFunSuite {
     }.unsafeToFuture()
   }
 
-  for (operation <- List("reopen", "close", "clear", "exclusive")) {
+  for (operation <- List("reinitialize", "remove", "clear", "exclusive")) {
     test(
       s"messages and commands captured before $operation never target a new visit"
     ) {
       val connected = binding(rules)
-      val opened = connected.open(Model(), Children.a, 1).model
+      val opened = connected.init(Model(), Children.a, 1).model
       val message = connected.message(opened, Children.a, 100).get
       val command = connected.send(opened, Children.a, 100)
       val intermediate = operation match {
-        case "close"     => connected.close(opened, Children.a).model
+        case "remove"     => connected.remove(opened, Children.a).model
         case "clear"     => connected.clear(opened).model
-        case "exclusive" => connected.open(opened, Children.b, 10).model
+        case "exclusive" => connected.init(opened, Children.b, 10).model
         case _           => opened
       }
-      if (operation != "reopen") {
+      if (operation != "reinitialize") {
         assert(connected.message(intermediate, Children.a, 1).isEmpty)
         assert(connected.send(intermediate, Children.a, 1) == Cmd.none)
         assert(
@@ -81,7 +81,7 @@ class FeatureBindingMessageSpec extends AsyncFunSuite {
           )
         )
       }
-      val reopened = connected.open(intermediate, Children.a, 5).model
+      val reopened = connected.init(intermediate, Children.a, 5).model
       assert(
         connected.route(message, reopened).get == Transition.unchanged(reopened)
       )
@@ -105,14 +105,14 @@ class FeatureBindingMessageSpec extends AsyncFunSuite {
 
   test("ordinary updates and closing siblings preserve captured destinations") {
     val connected = binding(Children.policy())
-    val opened = connected.open(Model(), Children.a, 1).model
-    val both = connected.open(opened, Children.text, "keep").model
+    val opened = connected.init(Model(), Children.a, 1).model
+    val both = connected.init(opened, Children.text, "keep").model
     val command = connected.send(both, Children.a, 2)
     val updated = connected.route(
       connected.message(both, Children.a, 3).get,
       both
     ).get.model
-    val closedSibling = connected.close(updated, Children.text).model
+    val closedSibling = connected.remove(updated, Children.text).model
     emitted(command).map { messages =>
       val next = connected.route(messages.head, closedSibling).get.model
       assert(Children.a.model(next.children).contains(6))

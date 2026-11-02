@@ -54,8 +54,8 @@ object FeatureExamples {
   val feature: Feature[Unit, Unit, Model, Msg, Nothing] =
     new Feature[Unit, Unit, Model, Msg, Nothing] {
       def init(input: Unit, context: Unit) = {
-        val first = left.open(Model(), Left.counter, 1)
-        val second = right.open(first.model, Right.counter, 10)
+        val first = left.init(Model(), Left.counter, 1)
+        val second = right.init(first.model, Right.counter, 10)
         Transition(second.model, first.cmd ++ second.cmd)
       }
       def update(
@@ -93,7 +93,7 @@ class FeatureSpec extends AnyFunSuite {
     val old = Msg.LeftEvent(Left.counter.event(initial.left, 2).get)
     val cleared = left.clear(initial).model
     assert(feature.update(old, cleared) == Transition.unchanged(cleared))
-    val reopened = left.open(cleared, Left.counter, 1).model
+    val reopened = left.init(cleared, Left.counter, 1).model
     assert(feature.update(old, reopened).model == reopened)
     val current = feature.update(
       Msg.LeftEvent(Left.counter.event(reopened.left, 2).get),
@@ -111,17 +111,17 @@ class FeatureSpec extends AnyFunSuite {
       { case Msg.LeftEvent(e) => Some(e); case _ => None },
       (_, m) => Transition(m.copy(left = Left.clear(m.left)))
     )
-    val next = closing.open(Model(), Left.counter, 3)
+    val next = closing.init(Model(), Left.counter, 3)
     assert(Left.counter.model(next.model.left).isEmpty)
   }
 
   test("nested ChildFeatures groups reject events from a previous ancestor") {
     object Outer extends ChildFeatures[Unit] { val counters = child(feature) }
-    val first = Outer.open(Outer.empty, Outer.counters, (), Outer.policy())
+    val first = Outer.init(Outer.empty, Outer.counters, (), Outer.policy())
     val inside = Outer.counters.model(first.model).get
     val childMsg = Msg.LeftEvent(Left.counter.event(inside.left, 1).get)
     val old = Outer.counters.event(first.model, childMsg).get
-    val second = Outer.open(first.model, Outer.counters, (), Outer.policy())
+    val second = Outer.init(first.model, Outer.counters, (), Outer.policy())
     assert(!Outer.accepts(old, second.model))
     val current = Outer.counters.model(second.model).get
     val msg = Msg.LeftEvent(Left.counter.event(current.left, 4).get)
@@ -130,7 +130,7 @@ class FeatureSpec extends AnyFunSuite {
     assert(
       Left.counter.model(Outer.counters.model(next.model).get.left).contains(5)
     )
-    val changedInner = left.open(current, Left.counter, 20).model
+    val changedInner = left.init(current, Left.counter, 20).model
     // Keep the outer visit, but replace an inner visit before its old message arrives.
     object Container extends ChildFeatures[Unit] {
       val item = child(new Feature[Model, Unit, Model, Msg, Nothing] {
@@ -141,7 +141,7 @@ class FeatureSpec extends AnyFunSuite {
         def view(model: Model, context: Unit, dispatch: Msg => Unit) = div()
       })
     }
-    val container = Container.open(
+    val container = Container.init(
       Container.empty,
       Container.item,
       changedInner,
@@ -177,7 +177,7 @@ class FeatureSpec extends AnyFunSuite {
           div(model.text)
       })
     }
-    val initial = Slot.open(Slot.empty, Slot.item, (), Slot.policy()).model
+    val initial = Slot.init(Slot.empty, Slot.item, (), Slot.policy()).model
     val next = Slot.update(Slot.item.event(initial, ()).get, initial)
     assert(Slot.item.model(next.model).get.text == "after")
   }
@@ -195,15 +195,15 @@ class FeatureSpec extends AnyFunSuite {
     """)
     assertDoesNotCompile("""
       import marubinotto.fui.FeatureExamples.*
-      Left.open(Left.empty, Right.counter, 1, Left.policy())
+      Left.init(Left.empty, Right.counter, 1, Left.policy())
     """)
     assertDoesNotCompile("""
       import marubinotto.fui.FeatureExamples.*
-      Left.open(Left.empty, Left.counter, "wrong input", Left.policy())
+      Left.init(Left.empty, Left.counter, "wrong input", Left.policy())
     """)
     assertDoesNotCompile("""
       import marubinotto.fui.FeatureExamples.*
-      left.open(Model(), Right.counter, 1)
+      left.init(Model(), Right.counter, 1)
     """)
   }
 

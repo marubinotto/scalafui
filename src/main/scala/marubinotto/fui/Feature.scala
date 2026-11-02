@@ -98,7 +98,7 @@ trait FeatureBinding[Context, Model, Msg, Out] {
       context: Context
   ): Transition[Model, Msg, Out]
 
-  final def open[I, M, E, O](
+  final def init[I, M, E, O](
       model: Model,
       child: features.Child[I, M, E, O],
       input: I,
@@ -107,7 +107,7 @@ trait FeatureBinding[Context, Model, Msg, Out] {
     lift(
       model,
       context,
-      features.open(
+      features.init(
         state(model),
         child,
         input,
@@ -116,11 +116,11 @@ trait FeatureBinding[Context, Model, Msg, Out] {
       )
     )
 
-  final def close(
+  final def remove(
       model: Model,
       child: features.Child[?, ?, ?, ?]
   ): Transition[Model, Msg, Out] =
-    Transition(replace(model, features.close(state(model), child)))
+    Transition(replace(model, features.remove(state(model), child)))
 
   final def clear(model: Model): Transition[Model, Msg, Out] =
     Transition(replace(model, features.clear(state(model))))
@@ -137,7 +137,7 @@ trait FeatureBinding[Context, Model, Msg, Out] {
     child.event(state(model), msg).map(wrap)
 
   /** Send to the visit captured now, not the visit active when the command
-    * runs. An inactive child produces Cmd.none, even if opened before
+    * runs. An inactive child produces Cmd.none, even if initialized before
     * execution.
     */
   final def send[I, M, E, O](
@@ -162,13 +162,13 @@ trait FeatureBinding[Context, Model, Msg, Out] {
       childContext(model, context)
     )
 
-  final def open[I, M, E, O](
+  final def init[I, M, E, O](
       model: Model,
       child: features.Child[I, M, E, O],
       input: I
   )(using
       unit: Unit =:= Context
-  ): Transition[Model, Msg, Out] = open(model, child, input, unit(()))
+  ): Transition[Model, Msg, Out] = init(model, child, input, unit(()))
 
   final def view(
       model: Model,

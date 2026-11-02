@@ -64,9 +64,9 @@ class ChildFeaturesSpec extends AnyFunSuite {
     "default policy keeps differently typed children independent through one binding"
   ) {
     val connected = binding(Children.policy())
-    val first = connected.open(Model(), Children.a, 1).model
-    val second = connected.open(first, Children.b, 10).model
-    val both = connected.open(second, Children.text, "hello").model
+    val first = connected.init(Model(), Children.a, 1).model
+    val second = connected.init(first, Children.b, 10).model
+    val both = connected.init(second, Children.text, "hello").model
     val result = connected.route(
       Msg.ChildEvent(Children.a.event(both.children, 2).get),
       both
@@ -87,45 +87,45 @@ class ChildFeaturesSpec extends AnyFunSuite {
     "exclusive groups replace only their own members, preserving other event destinations"
   ) {
     val connected = binding(rules)
-    val first = connected.open(Model(), Children.a, 1).model
-    val second = connected.open(first, Children.c, 3).model
-    val all = connected.open(second, Children.text, "keep").model
+    val first = connected.init(Model(), Children.a, 1).model
+    val second = connected.init(first, Children.c, 3).model
+    val all = connected.init(second, Children.text, "keep").model
     val staleA = Msg.ChildEvent(Children.a.event(all.children, 100).get)
     val currentC = Msg.ChildEvent(Children.c.event(all.children, 2).get)
-    val b = connected.open(all, Children.b, 2).model
+    val b = connected.init(all, Children.b, 2).model
     assert(Children.a.model(b.children).isEmpty)
     assert(Children.b.model(b.children).contains(2))
     assert(connected.route(staleA, b).get == Transition.unchanged(b))
     val c = connected.route(currentC, b).get.model
     assert(Children.c.model(c.children).contains(5))
-    val d = connected.open(c, Children.d, 4).model
+    val d = connected.init(c, Children.d, 4).model
     assert(Children.c.model(d.children).isEmpty)
     assert(Children.b.model(d.children).contains(2))
     assert(Children.text.model(d.children).contains("keep"))
-    val again = connected.open(d, Children.a, 1).model
+    val again = connected.init(d, Children.a, 1).model
     assert(connected.route(staleA, again).get == Transition.unchanged(again))
   }
 
-  for (operation <- List("reopen", "close", "clear")) {
+  for (operation <- List("reinitialize", "remove", "clear")) {
     test(
       s"$operation preserves history and rejects old events after reopening"
     ) {
       val connected = binding(Children.policy())
-      val opened = connected.open(Model(), Children.a, 1).model
-      val both = connected.open(opened, Children.text, "keep").model
+      val opened = connected.init(Model(), Children.a, 1).model
+      val both = connected.init(opened, Children.text, "keep").model
       val stale = Msg.ChildEvent(Children.a.event(both.children, 100).get)
       val before = operation match {
-        case "close" => connected.close(both, Children.a).model
+        case "remove" => connected.remove(both, Children.a).model
         case "clear" => connected.clear(both).model
         case _       => both
       }
-      if (operation != "reopen") {
+      if (operation != "reinitialize") {
         assert(
           connected.route(stale, before).get == Transition.unchanged(before)
         )
         assert(Children.a.event(before.children, 1).isEmpty)
       }
-      val after = connected.open(before, Children.a, 1).model
+      val after = connected.init(before, Children.a, 1).model
       assert(connected.route(stale, after).get == Transition.unchanged(after))
       assert(
         Children.text.model(after.children) == (if (operation == "clear") None
@@ -176,7 +176,7 @@ class ChildFeaturesSpec extends AnyFunSuite {
     """)
     assertDoesNotCompile("""
       import marubinotto.fui.ChildFeaturesExamples.*
-      binding(rules).open(Model(), Children.a, "wrong")
+      binding(rules).init(Model(), Children.a, "wrong")
     """)
     assertDoesNotCompile("""
       import marubinotto.fui.ChildFeaturesExamples.*
@@ -200,7 +200,7 @@ class ChildFeaturesSpec extends AnyFunSuite {
           output match {
             case Children.a.output(value) =>
               assert(Children.a.model(model.children).contains(value))
-              connected.open(model, Children.b, value + 1)
+              connected.init(model, Children.b, value + 1)
             case Children.b.output(value) =>
               assert(Children.a.model(model.children).isEmpty)
               assert(Children.b.model(model.children).contains(value))
@@ -208,7 +208,7 @@ class ChildFeaturesSpec extends AnyFunSuite {
             case _ => Transition.unchanged(model)
           }
       )
-    val next = connected.open(Model(), Children.a, 3).model
+    val next = connected.init(Model(), Children.a, 3).model
     assert(Children.a.model(next.children).isEmpty)
     assert(Children.b.model(next.children).contains(4))
     assert(next.log == List("b:4"))
@@ -244,7 +244,7 @@ class ChildFeaturesSpec extends AnyFunSuite {
       (_, m) => Transition.unchanged(m)
     )
     var events = List.empty[Views.Event]
-    val first = connected.open(ViewModel(), Views.one, 1).model
+    val first = connected.init(ViewModel(), Views.one, 1).model
     connected.view(
       first,
       Views.one,
@@ -252,8 +252,8 @@ class ChildFeaturesSpec extends AnyFunSuite {
       throw new AssertionError("fallback")
     )
     val stale = callback
-    val second = connected.open(first, Views.two, 2).model
-    val again = connected.open(second, Views.one, 3).model
+    val second = connected.init(first, Views.two, 2).model
+    val again = connected.init(second, Views.one, 3).model
     stale(100)
     assert(
       connected.route(events.head, again).get == Transition.unchanged(again)

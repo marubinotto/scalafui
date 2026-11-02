@@ -68,9 +68,9 @@ object Main {
   def applyUrlChange(url: URL, model: Model): Transition[Model, Msg, Nothing] =
     (url.pathname + url.search + url.hash) match {
       case Route.searchWithQuery(query) =>
-        pageBinding.open(model, Pages.search, query)
-      case Route.search(_) => pageBinding.open(model, Pages.search, "")
-      case Route.work(id)  => pageBinding.open(model, Pages.work, id)
+        pageBinding.init(model, Pages.search, query)
+      case Route.search(_) => pageBinding.init(model, Pages.search, "")
+      case Route.work(id)  => pageBinding.init(model, Pages.work, id)
       case _               => pageBinding.clear(model)
     }
 

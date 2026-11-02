@@ -125,6 +125,28 @@ trait FeatureBinding[Context, Model, Msg, Out] {
   final def clear(model: Model): Transition[Model, Msg, Out] =
     Transition(replace(model, features.clear(state(model))))
 
+  /** Capture a parent message addressed to the child's current visit. Returns
+    * None when inactive. Routing after replacement ignores the message;
+    * creating it neither updates the child nor evaluates its context.
+    */
+  final def message[I, M, E, O](
+      model: Model,
+      child: features.Child[I, M, E, O],
+      msg: E
+  ): Option[Msg] =
+    child.event(state(model), msg).map(wrap)
+
+  /** Send to the visit captured now, not the visit active when the command
+    * runs. An inactive child produces Cmd.none, even if opened before
+    * execution.
+    */
+  final def send[I, M, E, O](
+      model: Model,
+      child: features.Child[I, M, E, O],
+      msg: E
+  ): Cmd[Msg] =
+    message(model, child, msg).fold[Cmd[Msg]](Cmd.none)(Browser.send(_))
+
   final def view(
       model: Model,
       child: features.Child[?, ?, ?, ?],

@@ -780,6 +780,31 @@ are rejected when constructing the group/policy. Policies do not change during a
 binding's lifetime. Each `view` call names the child to render; render multiple
 children to display them together, and choose layout and order in the parent.
 
+### Sending messages to a child visit
+
+A binding can capture a child's current address as a parent message, or create
+a command that emits it:
+
+```scala
+val back: Option[Msg] =
+  pageBinding.message(model, Pages.work, Work.Msg.Back)
+val backCommand: Cmd[Msg] =
+  pageBinding.send(model, Pages.work, Work.Msg.Back)
+```
+
+Use `message` for deferred callbacks such as confirmation dialogs, and `send`
+when an update should return a command. Both capture the child's generation
+**when called**, without updating the child or evaluating its context. They need
+no Context argument, including on bindings with non-Unit context. The message
+is processed through the usual parent update and binding output handler, using
+the context supplied at that time.
+
+An inactive child yields `None` or `Cmd.none`. Opening it later does not activate
+an already-created command. Closing, clearing, reopening, or exclusive replacement
+makes captured messages stale; routing ignores them rather than delivering them
+to a new visit. Ordinary updates and changes to concurrent siblings preserve the
+destination. The lower-level `child.event(state, msg)` API remains available.
+
 ### App-level subscriptions
 
 The App can inspect child state to decide which sources to subscribe to. This

@@ -105,6 +105,22 @@ class FeatureContextSpec extends AnyFunSuite {
     assert(Children.label.model(withLabel.children).contains("label"))
   }
 
+  test(
+    "binding messages capture a visit without evaluating or retaining context"
+  ) {
+    val f = new Fixture
+    import f.*
+    val opened = feature.init(10, Context(2, "initial")).model
+    val before = projections
+    val pending = binding.message(opened, Children.count, 1).get
+    assert(binding.send(opened, Children.count, 1).isInstanceOf[Cmd.One[?]])
+    assert(projections == before)
+    val current = opened.copy(offset = 20)
+    val next = feature.update(pending, current, Context(7, "delivery")).model
+    assert(Children.count.model(next.children).contains(41))
+    assert(next.log == List("27:delivery"))
+  }
+
   test("stale events are rejected before projecting context") {
     val f = new Fixture
     import f.*

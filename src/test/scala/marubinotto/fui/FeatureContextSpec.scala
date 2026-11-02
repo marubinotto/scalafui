@@ -25,7 +25,7 @@ class FeatureContextSpec extends AnyFunSuite {
       }
     }
     object Children extends ChildFeatures[Context] {
-      val count = child(counter.contramapContext[Context](_.offset))
+      val count = child(counter.mapContextFrom[Context](_.offset))
       val label = child(new Feature[Unit, String, String, Unit, Nothing] {
         def init(
             input: Unit,
@@ -40,7 +40,7 @@ class FeatureContextSpec extends AnyFunSuite {
           Transition(context)
         def view(model: String, context: String, dispatch: Unit => Unit) =
           div(context)
-      }.contramapContext[Context](_.label))
+      }.mapContextFrom[Context](_.label))
     }
     case class Model(
         children: Children.State = Children.empty,
@@ -141,7 +141,7 @@ class FeatureContextSpec extends AnyFunSuite {
   ) {
     val f = new Fixture
     import f.*
-    val adapted = feature.contramapContext[Int](n => Context(n, "nested"))
+    val adapted = feature.mapContextFrom[Int](n => Context(n, "nested"))
     object Outer extends ChildFeatures[Int] { val inner = child(adapted) }
     val initial =
       Outer.init(Outer.empty, Outer.inner, 0, Outer.policy(), 2).model
@@ -153,7 +153,7 @@ class FeatureContextSpec extends AnyFunSuite {
     assert(Children.count.model(updated.children).contains(15))
     assert(updated.log == List("11:nested"))
     intercept[IllegalArgumentException] {
-      feature.contramapContext[Context](identity).withFeatures(binding)
+      feature.mapContextFrom[Context](identity).withFeatures(binding)
     }
   }
 }

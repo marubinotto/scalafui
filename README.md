@@ -657,7 +657,7 @@ the current update. A command still captures any values used when it was created
 its reply is processed with the context supplied when that reply is handled.
 
 A child need not depend on a global context type. Adapt a narrower feature when
-registering it, for example `child(editor.contramapContext[AppContext](_.editor))`.
+registering it, for example `child(editor.mapContextFrom[AppContext](_.editor))`.
 The projection applies to initialization, updates, and rendering. Directly using
 the application's context type is also supported.
 

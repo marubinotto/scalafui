@@ -30,7 +30,7 @@ trait Feature[Input, Context, Model, Msg, Out] { self =>
   def view(model: Model, context: Context, dispatch: Msg => Unit): ReactElement
 
   /** Adapt the caller's context without capturing a context value in state. */
-  final def contramapContext[C](
+  final def mapContextFrom[C](
       project: C => Context
   ): Feature[Input, C, Model, Msg, Out] =
     new Feature[Input, C, Model, Msg, Out] {

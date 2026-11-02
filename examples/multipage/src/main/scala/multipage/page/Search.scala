@@ -11,7 +11,8 @@ import multipage.domain
 import multipage.Server
 import multipage.LoadState
 
-object Search extends Feature[String, Search.Model, Search.Msg, Search.Out] {
+object Search
+    extends Feature[String, Unit, Search.Model, Search.Msg, Search.Out] {
 
   //
   // MODEL
@@ -25,12 +26,13 @@ object Search extends Feature[String, Search.Model, Search.Msg, Search.Out] {
 
   def init(): Transition[Model, Msg, Out] = Transition(Model())
 
-  def init(query: String): Transition[Model, Msg, Out] =
+  def init(query: String, context: Unit): Transition[Model, Msg, Out] =
     if (query.isBlank) Transition(Model(query = query))
-    else Transition(
-      Model(query = query, works = LoadState.Loading),
-      Server.searchWorks(query).map(SearchResult(0, _)).toCmd
-    )
+    else
+      Transition(
+        Model(query = query, works = LoadState.Loading),
+        Server.searchWorks(query).map(SearchResult(0, _)).toCmd
+      )
 
   //
   // UPDATE
@@ -54,20 +56,32 @@ object Search extends Feature[String, Search.Model, Search.Msg, Search.Out] {
 
   val DebounceKey = "search"
 
-  def update(msg: Msg, model: Model): Transition[Model, Msg, Out] =
+  def update(
+      msg: Msg,
+      model: Model,
+      context: Unit
+  ): Transition[Model, Msg, Out] =
     msg match {
       case QueryInput(query) =>
         val serial = model.requestSerial + 1
         if (query.isBlank())
           Transition(
-            model.copy(query = query, requestSerial = serial, works = LoadState.Idle),
+            model.copy(
+              query = query,
+              requestSerial = serial,
+              works = LoadState.Idle
+            ),
             // Replace a pending debounce without starting another request.
             Cmd.exec(IO.unit).debounce(DebounceKey, 1.millis),
             List(Out.QueryChanged(query))
           )
         else
           Transition(
-            model.copy(query = query, requestSerial = serial, works = LoadState.Loading),
+            model.copy(
+              query = query,
+              requestSerial = serial,
+              works = LoadState.Loading
+            ),
             Server.searchWorks(query)
               .map(SearchResult(serial, _)).toCmd
               .debounce(DebounceKey, 500.millis),
@@ -91,7 +105,7 @@ object Search extends Feature[String, Search.Model, Search.Msg, Search.Out] {
   // VIEW
   //
 
-  def view(model: Model, dispatch: Msg => Unit): ReactElement = {
+  def view(model: Model, context: Unit, dispatch: Msg => Unit): ReactElement = {
     div(className := "search")(
       h1("Book Search"),
       div(className := "search-query")(
@@ -103,9 +117,10 @@ object Search extends Feature[String, Search.Model, Search.Msg, Search.Out] {
         )
       ),
       model.works match {
-        case LoadState.Failed(error) => div(className := "error")(error.toString())
+        case LoadState.Failed(error) =>
+          div(className := "error")(error.toString())
         case LoadState.Loading => div(className := "loading")("Loading...")
-        case LoadState.Idle => div(className := "search-results")()
+        case LoadState.Idle    => div(className := "search-results")()
         case LoadState.Loaded(works) =>
           div(className := "search-results")(
             works.map(work =>

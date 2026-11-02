@@ -18,7 +18,7 @@ object Main {
     val work = Root / "work" / Arg[String]()
   }
 
-  object Pages extends ChildFeatures {
+  object Pages extends ChildFeatures[Unit] {
     val search = child(page.Search)
     val work = child(page.Work)
   }

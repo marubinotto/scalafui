@@ -6,7 +6,8 @@ import slinky.core.facade.ReactElement
 /** Typed child registrations. Coexistence rules are supplied separately at
   * binding time.
   */
-abstract class ChildFeatures {
+abstract class ChildFeatures[Context] {
+  type ContextValue = Context
   final class State private[ChildFeatures] (
       private[ChildFeatures] val generations: Map[AnyRef, Long],
       private[ChildFeatures] val entries: Map[AnyRef, Entry]
@@ -63,12 +64,20 @@ abstract class ChildFeatures {
   // Type erasure stays here. Child identity is checked before payload/model casts.
   private trait Entry {
     def model: Any
-    def update(event: Event, state: State): Transition[State, Event, Output]
-    def view(generation: Long, dispatch: Event => Unit): ReactElement
+    def update(
+        event: Event,
+        state: State,
+        context: Context
+    ): Transition[State, Event, Output]
+    def view(
+        generation: Long,
+        dispatch: Event => Unit,
+        context: Context
+    ): ReactElement
   }
 
   final class Child[I, M, E, O] private[ChildFeatures] (
-      feature: Feature[I, M, E, O]
+      feature: Feature[I, Context, M, E, O]
   ) {
     child =>
     private case class ViewProps(content: ReactElement)
@@ -98,9 +107,10 @@ abstract class ChildFeatures {
     private[ChildFeatures] def initialize(
         input: I,
         generation: Long,
-        state: State
+        state: State,
+        context: Context
     ) =
-      transition(feature.init(input), generation, state)
+      transition(feature.init(input, context), generation, state)
 
     private def transition(
         change: Transition[M, E, O],
@@ -118,17 +128,18 @@ abstract class ChildFeatures {
 
     private def entry(value: M): Entry = new Entry {
       def model: Any = value
-      def update(event: Event, state: State) =
+      def update(event: Event, state: State, context: Context) =
         transition(
-          feature.update(event.message.asInstanceOf[E], value),
+          feature.update(event.message.asInstanceOf[E], value, context),
           event.generation,
           state
         )
-      def view(generation: Long, dispatch: Event => Unit) =
+      def view(generation: Long, dispatch: Event => Unit, context: Context) =
         boundary(
           ViewProps(
             feature.view(
               value,
+              context,
               msg => dispatch(new Event(generation, child, msg))
             )
           )
@@ -136,21 +147,24 @@ abstract class ChildFeatures {
     }
   }
 
-  final def child[I, M, E, O](feature: Feature[I, M, E, O]): Child[I, M, E, O] =
+  final def child[I, M, E, O](
+      feature: Feature[I, Context, M, E, O]
+  ): Child[I, M, E, O] =
     new Child(feature)
 
   final def open[I, M, E, O](
       state: State,
       child: Child[I, M, E, O],
       input: I,
-      policy: Policy
+      policy: Policy,
+      context: Context
   ): Transition[State, Event, Output] = {
     val generation = Math.addExact(state.generations.getOrElse(child, 0L), 1L)
     val prepared = new State(
       state.generations,
       state.entries -- policy.peers.getOrElse(child, Set.empty)
     )
-    child.initialize(input, generation, prepared)
+    child.initialize(input, generation, prepared, context)
   }
 
   final def close(state: State, child: Child[?, ?, ?, ?]): State =
@@ -162,12 +176,45 @@ abstract class ChildFeatures {
       state: State,
       child: Child[?, ?, ?, ?],
       dispatch: Event => Unit,
-      empty: => ReactElement
+      empty: => ReactElement,
+      context: Context
   ): ReactElement =
     state.entries.get(child).fold(empty)(
-      _.view(state.generations(child), dispatch)
+      _.view(state.generations(child), dispatch, context)
     )
 
+  /** Project fresh child context from the parent's current model and context.
+    */
+  final def bind[C, M, E, O](
+      policy: Policy,
+      state: M => State,
+      replace: (M, State) => M,
+      wrap: Event => E,
+      extract: E => Option[Event],
+      context: (M, C) => Context,
+      onOutput: (Output, M, C) => Transition[M, E, O]
+  ): FeatureBinding[C, M, E, O] { val features: ChildFeatures.this.type } = {
+    val rules = policy
+    val get = state
+    val set = replace
+    val encode = wrap
+    val decode = extract
+    val project = context
+    val output = onOutput
+    new FeatureBinding[C, M, E, O] {
+      val features: ChildFeatures.this.type = ChildFeatures.this
+      protected def policy = rules
+      protected def state(model: M) = get(model)
+      protected def replace(model: M, value: State) = set(model, value)
+      protected def wrap(event: Event) = encode(event)
+      protected def extract(msg: E) = decode(msg)
+      protected def childContext(model: M, context: C) = project(model, context)
+      protected def onOutput(out: Output, model: M, context: C) =
+        output(out, model, context)
+    }
+  }
+
+  /** Convenience for groups and parents that need no external context. */
   final def bind[M, E, O](
       policy: Policy,
       state: M => State,
@@ -175,23 +222,42 @@ abstract class ChildFeatures {
       wrap: Event => E,
       extract: E => Option[Event],
       onOutput: (Output, M) => Transition[M, E, O]
-  ): FeatureBinding[M, E, O] { val features: ChildFeatures.this.type } = {
-    val rules = policy
-    val get = state
-    val set = replace
-    val encode = wrap
-    val decode = extract
-    val output = onOutput
-    new FeatureBinding[M, E, O] {
-      val features: ChildFeatures.this.type = ChildFeatures.this
-      protected def policy = rules
-      protected def state(model: M) = get(model)
-      protected def replace(model: M, value: State) = set(model, value)
-      protected def wrap(event: Event) = encode(event)
-      protected def extract(msg: E) = decode(msg)
-      protected def onOutput(out: Output, model: M) = output(out, model)
-    }
-  }
+  )(using
+      unit: Unit =:= Context
+  ): FeatureBinding[Unit, M, E, O] { val features: ChildFeatures.this.type } =
+    bind[Unit, M, E, O](
+      policy,
+      state,
+      replace,
+      wrap,
+      extract,
+      (_, _) => unit(()),
+      (out, model, _) => onOutput(out, model)
+    )
+
+  final def open[I, M, E, O](
+      state: State,
+      child: Child[I, M, E, O],
+      input: I,
+      policy: Policy
+  )(using
+      unit: Unit =:= Context
+  ): Transition[State, Event, Output] =
+    open(state, child, input, policy, unit(()))
+
+  final def view(
+      state: State,
+      child: Child[?, ?, ?, ?],
+      dispatch: Event => Unit,
+      empty: => ReactElement
+  )(using
+      unit: Unit =:= Context
+  ): ReactElement = view(state, child, dispatch, empty, unit(()))
+
+  private[fui] final def update(event: Event, state: State)(using
+      unit: Unit =:= Context
+  ): Transition[State, Event, Output] =
+    update(event, state, unit(()))
 
   private[fui] def accepts(event: Event, state: State): Boolean =
     state.entries.contains(event.child) && state.generations.get(
@@ -200,9 +266,11 @@ abstract class ChildFeatures {
 
   private[fui] def update(
       event: Event,
-      state: State
+      state: State,
+      context: Context
   ): Transition[State, Event, Output] =
-    if (accepts(event, state)) state.entries(event.child).update(event, state)
+    if (accepts(event, state))
+      state.entries(event.child).update(event, state, context)
     else Transition.unchanged(state)
 }
 

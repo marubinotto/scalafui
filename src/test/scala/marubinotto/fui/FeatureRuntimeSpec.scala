@@ -37,15 +37,21 @@ class FeatureRuntimeSpec extends AsyncFunSuite {
       subscription: Int => Sub[Int] = _ => Sub.Empty,
       closeOnInit: Boolean = false
   ) {
-    val leaf = new Feature[Int, Int, Int, Unit] {
-      def init(input: Int) =
+    val leaf = new Feature[Int, Unit, Int, Int, Unit] {
+      def init(input: Int, context: Unit) =
         Transition(input, command(input), if (closeOnInit) List(()) else Nil)
-      def update(msg: Int, model: Int): Transition[Int, Int, Unit] = Transition(
+      def update(
+          msg: Int,
+          model: Int,
+          context: Unit
+      ): Transition[Int, Int, Unit] = Transition(
         model + msg
       )
-      def view(model: Int, dispatch: Int => Unit) = div(model.toString)
+      def view(model: Int, context: Unit, dispatch: Int => Unit) = div(
+        model.toString
+      )
     }
-    object Content extends ChildFeatures {
+    object Content extends ChildFeatures[Unit] {
       val leaf = this.child(App.this.leaf); val peer = this.child(App.this.leaf)
     }
     case class Model(content: Content.State = Content.empty)

@@ -61,14 +61,19 @@ class ChildFeatureViewSpec extends AsyncFunSuite {
       )
       div(s"${props.model}:$draft")
     }
-    val feature = new Feature[Int, Int, Int, Nothing] {
-      def init(input: Int): Transition[Int, Int, Nothing] = Transition(input)
-      def update(msg: Int, model: Int): Transition[Int, Int, Nothing] =
+    val feature = new Feature[Int, Unit, Int, Int, Nothing] {
+      def init(input: Int, context: Unit): Transition[Int, Int, Nothing] =
+        Transition(input)
+      def update(
+          msg: Int,
+          model: Int,
+          context: Unit
+      ): Transition[Int, Int, Nothing] =
         Transition(model + msg)
-      def view(model: Int, dispatch: Int => Unit): ReactElement =
+      def view(model: Int, context: Unit, dispatch: Int => Unit): ReactElement =
         component(Props(model, dispatch))
     }
-    object Children extends ChildFeatures {
+    object Children extends ChildFeatures[Unit] {
       val first = child(feature)
       val second = child(feature)
     }

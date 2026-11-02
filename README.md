@@ -552,7 +552,7 @@ ChildFeatures groups. Neither the set nor its policy determines DOM placement or
 
 ### Defining a feature
 
-`Feature[Input, Model, Msg, Out]` receives feature-specific initialization input.
+`Feature[Input, Context, Model, Msg, Out]` receives feature-specific initialization input.
 Its `init` and `update` return `Transition(model, cmd, outputs)`; commands and
 outputs default to empty. `Transition.unchanged(model)` is a convenient no-op.
 Features do not declare subscriptions; the App declares them through Program or
@@ -572,7 +572,7 @@ import slinky.web.html.*
 
 val catalog = Map("one" -> "Functional UI", "two" -> "Learning Scala")
 
-object Search extends Feature[String, String, Search.Msg, Search.Out] {
+object Search extends Feature[String, Unit, String, Search.Msg, Search.Out] {
   enum Msg {
     case QueryChanged(query: String)
     case Selected(id: String)
@@ -581,14 +581,14 @@ object Search extends Feature[String, String, Search.Msg, Search.Out] {
     case OpenWork(id: String)
   }
 
-  def init(query: String): Transition[String, Msg, Out] = Transition(query)
+  def init(query: String, context: Unit): Transition[String, Msg, Out] = Transition(query)
 
-  def update(msg: Msg, query: String): Transition[String, Msg, Out] = msg match {
+  def update(msg: Msg, query: String, context: Unit): Transition[String, Msg, Out] = msg match {
     case Msg.QueryChanged(value) => Transition(value)
     case Msg.Selected(id) => Transition(query, outputs = List(Out.OpenWork(id)))
   }
 
-  def view(query: String, dispatch: Msg => Unit) = div(
+  def view(query: String, context: Unit, dispatch: Msg => Unit) = div(
     input(value := query,
       onChange := (e => dispatch(Msg.QueryChanged(e.target.value)))),
     catalog.toSeq.sortBy(_._1)
@@ -599,22 +599,73 @@ object Search extends Feature[String, String, Search.Msg, Search.Out] {
   )
 }
 
-object Work extends Feature[String, String, Work.Msg, Work.Out] {
+object Work extends Feature[String, Unit, String, Work.Msg, Work.Out] {
   enum Msg { case Back }
   enum Out { case Back }
 
-  def init(id: String): Transition[String, Msg, Out] = Transition(id)
+  def init(id: String, context: Unit): Transition[String, Msg, Out] = Transition(id)
 
-  def update(msg: Msg, id: String): Transition[String, Msg, Out] = msg match {
+  def update(msg: Msg, id: String, context: Unit): Transition[String, Msg, Out] = msg match {
     case Msg.Back => Transition(id, outputs = List(Out.Back))
   }
 
-  def view(id: String, dispatch: Msg => Unit) = div(
+  def view(id: String, context: Unit, dispatch: Msg => Unit) = div(
     h2(catalog.getOrElse(id, "Unknown work")),
     button(onClick := (_ => dispatch(Msg.Back)))("Back to search")
   )
 }
 ```
+
+### Providing current context
+
+`Input` initializes a visit, `Model` holds the feature's own state, and `Context`
+provides read-only external data for each `init`, `update`, or `view` call. Context
+is not stored in child state. Changing context does not reinitialize the child or
+invoke `update`; the next call receives the value supplied by its owner.
+
+A group declares its shared context type with `ChildFeatures[Context]`. A binding
+projects that context from the parent's **current** model and context:
+
+```scala
+// Detail is a Feature[String, DetailContext, Detail.Model, Detail.Msg, Detail.Out].
+case class DetailContext(locale: String, canEdit: Boolean)
+object Details extends ChildFeatures[DetailContext] {
+  val detail = child(Detail)
+}
+// ParentModel contains details: Details.State and canEdit: Boolean.
+// ParentContext contains locale: String; ParentMsg.Child wraps Details.Event.
+val details = Details.bind[ParentContext, ParentModel, ParentMsg, Nothing](
+  policy = Details.policy(),
+  state = _.details,
+  replace = (model, state) => model.copy(details = state),
+  wrap = ParentMsg.Child.apply,
+  extract = { case ParentMsg.Child(event) => Some(event); case _ => None },
+  context = (model, context) => DetailContext(context.locale, model.canEdit),
+  onOutput = (output, model, context) => handleOutput(output, model, context)
+)
+// In the parent, pass the context received by init/update/view:
+// details.open(model, Details.detail, id, context)
+// details.view(model, Details.detail, dispatch, div(), context)
+// Attach details with parentFeature.withFeatures(details).
+```
+
+Output handlers receive the parent context and the accumulated parent model,
+including the installed child transition. Stale child events are rejected before
+context projection. An event callback captures its destination and message, not
+context: even a callback from an earlier render is handled using the context of
+the current update. A command still captures any values used when it was created;
+its reply is processed with the context supplied when that reply is handled.
+
+A child need not depend on a global context type. Adapt a narrower feature when
+registering it, for example `child(editor.contramapContext[AppContext](_.editor))`.
+The projection applies to initialization, updates, and rendering. Directly using
+the application's context type is also supported.
+
+Use `Unit` for features without external context. Their `init(input)`,
+`update(msg, model)`, and `view(model, dispatch)` convenience calls remain available.
+Groups and bindings with `Unit` context also offer context-free calls.
+`FeatureProgram` uses `Unit` as its root context; a root binding can derive a child
+context from the current application model using `(model, _: Unit) => ...`.
 
 ### Connecting a child to its parent
 
@@ -636,7 +687,7 @@ it during binding construction. Returning to Search resets the query in this exa
 ```scala
 import org.scalajs.dom.URL
 
-object Pages extends ChildFeatures {
+object Pages extends ChildFeatures[Unit] {
   val search = child(Search)
   val work = child(Work)
 }
@@ -707,7 +758,7 @@ prefer `FeatureBinding.open` to perform the parent integration automatically.
 A set can mix concurrent children with any number of independent exclusive groups:
 
 ```scala
-object AppFeatures extends ChildFeatures {
+object AppFeatures extends ChildFeatures[Unit] {
   val primarySearch = child(Search)
   val primaryWork = child(Work)
   val secondarySearch = child(Search)
@@ -827,7 +878,7 @@ message routing are handled by the feature connection.
 
 This is a breaking API change; no compatibility wrapper is provided.
 
-- Replace `extends FeatureSlot` with `extends ChildFeatures` and `variant(feature)`
+- Replace `extends FeatureSlot` with `extends ChildFeatures[Unit]` and `variant(feature)`
   with `child(feature)`. Typed references are now `Child[I, M, E, O]`.
 - Supply `policy` explicitly to `bind`. To preserve the old replacement behavior
   for two or more children, put them all in one `exclusive` group. For one child,
@@ -838,7 +889,8 @@ This is a breaking API change; no compatibility wrapper is provided.
   `binding.close(model, child)` for individual removal and `binding.clear(model)`
   for all children. Low-level `open` now requires an explicit policy too.
 - `FeatureBinding.features` replaces `slot`. Do not reset existing state to `empty`.
-- `Feature`, `Transition`, `FeatureProgram`, and Runtime execution semantics are unchanged.
+- `Transition`, `FeatureProgram`, and Runtime execution semantics are unchanged.
+  Feature declarations now include a Context type and argument; use `Unit` when unused.
 
 ## Routing
 

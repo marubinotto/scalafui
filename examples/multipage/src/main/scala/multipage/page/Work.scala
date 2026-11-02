@@ -11,7 +11,7 @@ import multipage.domain
 import multipage.Server
 import multipage.LoadState
 
-object Work extends Feature[String, Work.Model, Work.Msg, Nothing] {
+object Work extends Feature[String, Unit, Work.Model, Work.Msg, Nothing] {
 
   //
   // MODEL
@@ -23,7 +23,7 @@ object Work extends Feature[String, Work.Model, Work.Msg, Nothing] {
       editions: LoadState[Seq[domain.Edition]] = LoadState.Loading
   )
 
-  def init(workId: String): Transition[Model, Msg, Nothing] =
+  def init(workId: String, context: Unit): Transition[Model, Msg, Nothing] =
     Transition(
       Model(workId),
       Cmd.Batch(
@@ -43,7 +43,11 @@ object Work extends Feature[String, Work.Model, Work.Msg, Nothing] {
 
   export Msg.*
 
-  def update(msg: Msg, model: Model): Transition[Model, Msg, Nothing] =
+  def update(
+      msg: Msg,
+      model: Model,
+      context: Unit
+  ): Transition[Model, Msg, Nothing] =
     msg match {
       case WorkFetched(Right(work)) =>
         Transition(model.copy(work = LoadState.Loaded(work)), Cmd.none)
@@ -62,12 +66,18 @@ object Work extends Feature[String, Work.Model, Work.Msg, Nothing] {
   // VIEW
   //
 
-  def view(model: Model, @scala.annotation.unused dispatch: Msg => Unit): ReactElement =
+  def view(
+      model: Model,
+      context: Unit,
+      @scala.annotation.unused dispatch: Msg => Unit
+  ): ReactElement =
     div(className := "work-container")(
       model.work match {
         case LoadState.Loaded(work) => viewWork(work)
-        case LoadState.Failed(error) => div(className := "error")(error.toString())
-        case LoadState.Loading => div(className := "loading")("Loading the work description...")
+        case LoadState.Failed(error) =>
+          div(className := "error")(error.toString())
+        case LoadState.Loading =>
+          div(className := "loading")("Loading the work description...")
         case LoadState.Idle => div()
       },
       div(className := "editions-container")(
@@ -78,7 +88,9 @@ object Work extends Feature[String, Work.Model, Work.Msg, Nothing] {
           case LoadState.Failed(error) =>
             div(className := "error")(error.toString())
           case LoadState.Loading =>
-            div(className := "editions")(div(className := "loading")("Loading editions..."))
+            div(className := "editions")(
+              div(className := "loading")("Loading editions...")
+            )
           case LoadState.Idle => div()
         }
       )

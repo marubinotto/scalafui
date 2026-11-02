@@ -5,14 +5,17 @@ import org.scalajs.dom.URL
 import slinky.web.html.div
 
 object FeatureExamples {
-  object Counter extends Feature[Int, Int, Int, Int] {
-    def init(input: Int) = Transition(input, outputs = List(input))
-    def update(msg: Int, model: Int) =
+  object Counter extends Feature[Int, Unit, Int, Int, Int] {
+    def init(input: Int, context: Unit) =
+      Transition(input, outputs = List(input))
+    def update(msg: Int, model: Int, context: Unit) =
       Transition(model + msg, outputs = List(model + msg, msg))
-    def view(model: Int, dispatch: Int => Unit) = div(model.toString)
+    def view(model: Int, context: Unit, dispatch: Int => Unit) = div(
+      model.toString
+    )
   }
-  object Left extends ChildFeatures { val counter = child(Counter) }
-  object Right extends ChildFeatures { val counter = child(Counter) }
+  object Left extends ChildFeatures[Unit] { val counter = child(Counter) }
+  object Right extends ChildFeatures[Unit] { val counter = child(Counter) }
   case class Model(
       left: Left.State = Left.empty,
       right: Right.State = Right.empty,
@@ -48,18 +51,23 @@ object FeatureExamples {
         case _ => Transition.unchanged(m)
       }
   )
-  val feature: Feature[Unit, Model, Msg, Nothing] =
-    new Feature[Unit, Model, Msg, Nothing] {
-      def init(input: Unit) = {
+  val feature: Feature[Unit, Unit, Model, Msg, Nothing] =
+    new Feature[Unit, Unit, Model, Msg, Nothing] {
+      def init(input: Unit, context: Unit) = {
         val first = left.open(Model(), Left.counter, 1)
         val second = right.open(first.model, Right.counter, 10)
         Transition(second.model, first.cmd ++ second.cmd)
       }
-      def update(msg: Msg, model: Model): Transition[Model, Msg, Nothing] =
+      def update(
+          msg: Msg,
+          model: Model,
+          context: Unit
+      ): Transition[Model, Msg, Nothing] =
         throw new AssertionError(
           "child messages must not reach the parent's update"
         )
-      def view(model: Model, dispatch: Msg => Unit) = div("counters")
+      def view(model: Model, context: Unit, dispatch: Msg => Unit) =
+        div("counters")
     }.withFeatures(left).withFeatures(right)
 }
 
@@ -108,7 +116,7 @@ class FeatureSpec extends AnyFunSuite {
   }
 
   test("nested ChildFeatures groups reject events from a previous ancestor") {
-    object Outer extends ChildFeatures { val counters = child(feature) }
+    object Outer extends ChildFeatures[Unit] { val counters = child(feature) }
     val first = Outer.open(Outer.empty, Outer.counters, (), Outer.policy())
     val inside = Outer.counters.model(first.model).get
     val childMsg = Msg.LeftEvent(Left.counter.event(inside.left, 1).get)
@@ -124,12 +132,13 @@ class FeatureSpec extends AnyFunSuite {
     )
     val changedInner = left.open(current, Left.counter, 20).model
     // Keep the outer visit, but replace an inner visit before its old message arrives.
-    object Container extends ChildFeatures {
-      val item = child(new Feature[Model, Model, Msg, Nothing] {
-        def init(input: Model): Transition[Model, Msg, Nothing] =
+    object Container extends ChildFeatures[Unit] {
+      val item = child(new Feature[Model, Unit, Model, Msg, Nothing] {
+        def init(input: Model, context: Unit): Transition[Model, Msg, Nothing] =
           Transition(input)
-        def update(msg: Msg, model: Model) = feature.update(msg, model)
-        def view(model: Model, dispatch: Msg => Unit) = div()
+        def update(msg: Msg, model: Model, context: Unit) =
+          feature.update(msg, model)
+        def view(model: Model, context: Unit, dispatch: Msg => Unit) = div()
       })
     }
     val container = Container.open(
@@ -151,16 +160,21 @@ class FeatureSpec extends AnyFunSuite {
     val before = PartialModel(1)("before")
     val after = PartialModel(1)("after")
     assert(before == after)
-    object Slot extends ChildFeatures {
-      val item = child(new Feature[Unit, PartialModel, Unit, Nothing] {
-        def init(input: Unit): Transition[PartialModel, Unit, Nothing] =
+    object Slot extends ChildFeatures[Unit] {
+      val item = child(new Feature[Unit, Unit, PartialModel, Unit, Nothing] {
+        def init(
+            input: Unit,
+            context: Unit
+        ): Transition[PartialModel, Unit, Nothing] =
           Transition(before)
         def update(
             msg: Unit,
-            model: PartialModel
+            model: PartialModel,
+            context: Unit
         ): Transition[PartialModel, Unit, Nothing] =
           Transition(after)
-        def view(model: PartialModel, dispatch: Unit => Unit) = div(model.text)
+        def view(model: PartialModel, context: Unit, dispatch: Unit => Unit) =
+          div(model.text)
       })
     }
     val initial = Slot.open(Slot.empty, Slot.item, (), Slot.policy()).model

@@ -4,19 +4,24 @@ import org.scalatest.funsuite.AnyFunSuite
 import slinky.web.html.div
 
 object ChildFeaturesExamples {
-  object Count extends Feature[Int, Int, Int, Int] {
-    def init(input: Int) = Transition(input, outputs = List(input))
-    def update(msg: Int, model: Int) =
+  object Count extends Feature[Int, Unit, Int, Int, Int] {
+    def init(input: Int, context: Unit) =
+      Transition(input, outputs = List(input))
+    def update(msg: Int, model: Int, context: Unit) =
       Transition(model + msg, outputs = List(model + msg, msg))
-    def view(model: Int, dispatch: Int => Unit) = div(model.toString)
+    def view(model: Int, context: Unit, dispatch: Int => Unit) = div(
+      model.toString
+    )
   }
-  object Text extends Feature[String, String, String, String] {
-    def init(input: String) = Transition(input)
-    def update(msg: String, model: String) =
+  object Text extends Feature[String, Unit, String, String, String] {
+    def init(input: String, context: Unit) = Transition(input)
+    def update(msg: String, model: String, context: Unit) =
       Transition(model + msg, outputs = List(msg))
-    def view(model: String, dispatch: String => Unit) = div(model)
+    def view(model: String, context: Unit, dispatch: String => Unit) = div(
+      model
+    )
   }
-  object Children extends ChildFeatures {
+  object Children extends ChildFeatures[Unit] {
     val a = child(Count)
     val b = child(Count)
     val c = child(Count)
@@ -156,17 +161,17 @@ class ChildFeaturesSpec extends AnyFunSuite {
   ) {
     assertDoesNotCompile("""
       import marubinotto.fui.ChildFeaturesExamples.*
-      object Foreign extends marubinotto.fui.ChildFeatures { val a = child(Count) }
+      object Foreign extends marubinotto.fui.ChildFeatures[Unit] { val a = child(Count) }
       Children.exclusive(Children.a, Foreign.a)
     """)
     assertDoesNotCompile("""
       import marubinotto.fui.ChildFeaturesExamples.*
-      object Foreign extends marubinotto.fui.ChildFeatures { val a = child(Count) }
+      object Foreign extends marubinotto.fui.ChildFeatures[Unit] { val a = child(Count) }
       Children.policy(Foreign.exclusive(Foreign.a, Foreign.a))
     """)
     assertDoesNotCompile("""
       import marubinotto.fui.ChildFeaturesExamples.*
-      object Foreign extends marubinotto.fui.ChildFeatures
+      object Foreign extends marubinotto.fui.ChildFeatures[Unit]
       binding(Foreign.policy())
     """)
     assertDoesNotCompile("""
@@ -182,8 +187,9 @@ class ChildFeaturesSpec extends AnyFunSuite {
   test(
     "initial output can open a sibling and output handlers see installed state in order"
   ) {
-    lazy val connected
-        : FeatureBinding[Model, Msg, Nothing] { val features: Children.type } =
+    lazy val connected: FeatureBinding[Unit, Model, Msg, Nothing] {
+      val features: Children.type
+    } =
       Children.bind[Model, Msg, Nothing](
         rules,
         _.children,
@@ -212,15 +218,20 @@ class ChildFeaturesSpec extends AnyFunSuite {
     "view callbacks capture a child visit and empty views do not evaluate active fallbacks"
   ) {
     var callback: Int => Unit = _ => ()
-    val clickable = new Feature[Int, Int, Int, Nothing] {
-      def init(input: Int): Transition[Int, Int, Nothing] = Transition(input)
-      def update(msg: Int, model: Int): Transition[Int, Int, Nothing] =
+    val clickable = new Feature[Int, Unit, Int, Int, Nothing] {
+      def init(input: Int, context: Unit): Transition[Int, Int, Nothing] =
+        Transition(input)
+      def update(
+          msg: Int,
+          model: Int,
+          context: Unit
+      ): Transition[Int, Int, Nothing] =
         Transition(model + msg)
-      def view(model: Int, dispatch: Int => Unit) = {
+      def view(model: Int, context: Unit, dispatch: Int => Unit) = {
         callback = dispatch; div(model.toString)
       }
     }
-    object Views extends ChildFeatures {
+    object Views extends ChildFeatures[Unit] {
       val one = child(clickable); val two = child(clickable)
     }
     case class ViewModel(state: Views.State = Views.empty)

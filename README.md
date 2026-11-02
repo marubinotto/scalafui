@@ -769,6 +769,18 @@ and concurrent children's states and event addresses remain valid.
 Use `close` or `clear` on existing state to retain generation history; `empty` is
 only for initial state, never for resetting an existing set.
 
+Rendering through `ChildFeatures.view` or a binding's `view` also gives each child
+visit its own React identity, without adding a DOM wrapper. Ordinary updates
+preserve component-local state at the same position in the tree; reopening a
+child or replacing it with another child remounts its view and runs the old
+view's effect cleanup. Feature implementations do not need to supply a visit key
+(their own lists still need normal React keys). Calling `feature.view` directly
+does not install this boundary.
+
+An active child is not necessarily rendered. Removing its view from the React
+tree still discards component-local state, even if the child remains open.
+Values that must survive hiding and redisplaying a child belong in its Model.
+
 ```mermaid
 flowchart LR
   old["Old child starts Cmd"] --> work["IO continues running"]

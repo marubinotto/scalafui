@@ -1,5 +1,6 @@
 package marubinotto.fui
 
+import slinky.core.FunctionalComponent
 import slinky.core.facade.ReactElement
 
 /** Typed child registrations. Coexistence rules are supplied separately at
@@ -70,6 +71,16 @@ abstract class ChildFeatures {
       feature: Feature[I, M, E, O]
   ) {
     child =>
+    private case class ViewProps(content: ReactElement)
+    private val viewId = ChildFeatures.allocateViewId()
+
+    // The component type identifies this child; its key identifies the visit.
+    // Include the child ID so concurrently rendered siblings have distinct keys.
+    // Keep the type stable across updates, which recreate Entry instances.
+    private val boundary = FunctionalComponent[ViewProps] { props =>
+      props.content
+    }
+
     object output {
       def unapply(out: Output): Option[O] =
         Option.when(out.child eq child)(out.value.asInstanceOf[O])
@@ -114,7 +125,14 @@ abstract class ChildFeatures {
           state
         )
       def view(generation: Long, dispatch: Event => Unit) =
-        feature.view(value, msg => dispatch(new Event(generation, child, msg)))
+        boundary(
+          ViewProps(
+            feature.view(
+              value,
+              msg => dispatch(new Event(generation, child, msg))
+            )
+          )
+        ).withKey(s"$viewId:$generation")
     }
   }
 
@@ -186,4 +204,14 @@ abstract class ChildFeatures {
   ): Transition[State, Event, Output] =
     if (accepts(event, state)) state.entries(event.child).update(event, state)
     else Transition.unchanged(state)
+}
+
+object ChildFeatures {
+  // Allocated at registration, not during pure state transitions or rendering.
+  // Shared across groups so their children can also be rendered as siblings.
+  private var lastViewId = 0L
+  private def allocateViewId(): Long = {
+    lastViewId = Math.addExact(lastViewId, 1L)
+    lastViewId
+  }
 }

@@ -73,9 +73,9 @@ class ChildFeatureViewSpec extends AsyncFunSuite {
       def view(model: Int, context: Unit, dispatch: Int => Unit): ReactElement =
         component(Props(model, dispatch))
     }
-    object Children extends ChildFeatures[Unit] {
-      val first = child(feature)
-      val second = child(feature)
+    object Children extends FeatureSlots[Unit] {
+      val first = slot(feature)
+      val second = slot(feature)
     }
     val policy = Children.policy()
     var state = Children.init(Children.empty, Children.first, 1, policy).model

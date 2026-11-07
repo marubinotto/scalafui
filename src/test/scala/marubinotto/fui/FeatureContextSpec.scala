@@ -24,9 +24,9 @@ class FeatureContextSpec extends AnyFunSuite {
         div(rendered)
       }
     }
-    object Children extends ChildFeatures[Context] {
-      val count = child(counter.mapContextFrom[Context](_.offset))
-      val label = child(new Feature[Unit, String, String, Unit, Nothing] {
+    object Children extends FeatureSlots[Context] {
+      val count = slot(counter.mapContextFrom[Context](_.offset))
+      val label = slot(new Feature[Unit, String, String, Unit, Nothing] {
         def init(
             input: Unit,
             context: String
@@ -142,7 +142,7 @@ class FeatureContextSpec extends AnyFunSuite {
     val f = new Fixture
     import f.*
     val adapted = feature.mapContextFrom[Int](n => Context(n, "nested"))
-    object Outer extends ChildFeatures[Int] { val inner = child(adapted) }
+    object Outer extends FeatureSlots[Int] { val inner = slot(adapted) }
     val initial =
       Outer.init(Outer.empty, Outer.inner, 0, Outer.policy(), 2).model
     val inner = Outer.inner.model(initial).get

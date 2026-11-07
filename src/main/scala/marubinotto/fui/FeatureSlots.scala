@@ -3,23 +3,24 @@ package marubinotto.fui
 import slinky.core.FunctionalComponent
 import slinky.core.facade.ReactElement
 
-/** Typed child registrations. Coexistence rules are supplied separately at
-  * binding time.
+/** Typed logical slots for child features, independent of DOM placement.
+  * Each slot holds at most one active instance of its registered feature.
+  * Coexistence rules are supplied separately at binding time.
   */
-abstract class ChildFeatures[Context] {
+abstract class FeatureSlots[Context] {
   type ContextValue = Context
-  final class State private[ChildFeatures] (
-      private[ChildFeatures] val generations: Map[AnyRef, Long],
-      private[ChildFeatures] val entries: Map[AnyRef, Entry]
+  final class State private[FeatureSlots] (
+      private[FeatureSlots] val generations: Map[AnyRef, Long],
+      private[FeatureSlots] val entries: Map[AnyRef, Entry]
   )
-  final class Event private[ChildFeatures] (
-      private[ChildFeatures] val generation: Long,
-      private[ChildFeatures] val child: AnyRef,
-      private[ChildFeatures] val message: Any
+  final class Event private[FeatureSlots] (
+      private[FeatureSlots] val generation: Long,
+      private[FeatureSlots] val child: AnyRef,
+      private[FeatureSlots] val message: Any
   )
-  final class Output private[ChildFeatures] (
-      private[ChildFeatures] val child: AnyRef,
-      private[ChildFeatures] val value: Any
+  final class Output private[FeatureSlots] (
+      private[FeatureSlots] val child: AnyRef,
+      private[FeatureSlots] val value: Any
   )
 
   /** Initial state only. remove/clear retain generation history on existing
@@ -27,14 +28,14 @@ abstract class ChildFeatures[Context] {
     */
   val empty: State = new State(Map.empty, Map.empty)
 
-  final class Exclusive private[ChildFeatures] (
-      private[ChildFeatures] val members: Set[AnyRef]
+  final class Exclusive private[FeatureSlots] (
+      private[FeatureSlots] val members: Set[AnyRef]
   )
-  final class Policy private[ChildFeatures] (
-      private[ChildFeatures] val peers: Map[AnyRef, Set[AnyRef]]
+  final class Policy private[FeatureSlots] (
+      private[FeatureSlots] val peers: Map[AnyRef, Set[AnyRef]]
   )
 
-  final def exclusive(children: Child[?, ?, ?, ?]*): Exclusive = {
+  final def exclusive(children: Slot[?, ?, ?, ?]*): Exclusive = {
     require(
       children.size >= 2,
       "An exclusive group must contain at least two children"
@@ -76,12 +77,12 @@ abstract class ChildFeatures[Context] {
     ): ReactElement
   }
 
-  final class Child[I, M, E, O] private[ChildFeatures] (
+  final class Slot[I, M, E, O] private[FeatureSlots] (
       feature: Feature[I, Context, M, E, O]
   ) {
     child =>
     private case class ViewProps(content: ReactElement)
-    private val viewId = ChildFeatures.allocateViewId()
+    private val viewId = FeatureSlots.allocateViewId()
 
     // The component type identifies this child; its key identifies the visit.
     // Include the child ID so concurrently rendered siblings have distinct keys.
@@ -104,7 +105,7 @@ abstract class ChildFeatures[Context] {
         new Event(state.generations(child), child, msg)
       )
 
-    private[ChildFeatures] def initialize(
+    private[FeatureSlots] def initialize(
         input: I,
         generation: Long,
         state: State,
@@ -147,15 +148,15 @@ abstract class ChildFeatures[Context] {
     }
   }
 
-  final def child[I, M, E, O](
+  final def slot[I, M, E, O](
       feature: Feature[I, Context, M, E, O]
-  ): Child[I, M, E, O] =
-    new Child(feature)
+  ): Slot[I, M, E, O] =
+    new Slot(feature)
 
   /** Initialize a fresh child generation, replacing its state and removing exclusive peers. */
   final def init[I, M, E, O](
       state: State,
-      child: Child[I, M, E, O],
+      child: Slot[I, M, E, O],
       input: I,
       policy: Policy,
       context: Context
@@ -169,14 +170,14 @@ abstract class ChildFeatures[Context] {
   }
 
   /** Remove child state while retaining generation history; running commands are not cancelled. */
-  final def remove(state: State, child: Child[?, ?, ?, ?]): State =
+  final def remove(state: State, child: Slot[?, ?, ?, ?]): State =
     new State(state.generations, state.entries - child)
 
   final def clear(state: State): State = new State(state.generations, Map.empty)
 
   final def view(
       state: State,
-      child: Child[?, ?, ?, ?],
+      child: Slot[?, ?, ?, ?],
       dispatch: Event => Unit,
       empty: => ReactElement,
       context: Context
@@ -195,7 +196,7 @@ abstract class ChildFeatures[Context] {
       extract: E => Option[Event],
       context: (M, C) => Context,
       onOutput: (Output, M, C) => Transition[M, E, O]
-  ): FeatureBinding[C, M, E, O] { val features: ChildFeatures.this.type } = {
+  ): FeatureBinding[C, M, E, O] { val features: FeatureSlots.this.type } = {
     val rules = policy
     val get = state
     val set = replace
@@ -204,7 +205,7 @@ abstract class ChildFeatures[Context] {
     val project = context
     val output = onOutput
     new FeatureBinding[C, M, E, O] {
-      val features: ChildFeatures.this.type = ChildFeatures.this
+      val features: FeatureSlots.this.type = FeatureSlots.this
       protected def policy = rules
       protected def state(model: M) = get(model)
       protected def replace(model: M, value: State) = set(model, value)
@@ -226,7 +227,7 @@ abstract class ChildFeatures[Context] {
       onOutput: (Output, M) => Transition[M, E, O]
   )(using
       unit: Unit =:= Context
-  ): FeatureBinding[Unit, M, E, O] { val features: ChildFeatures.this.type } =
+  ): FeatureBinding[Unit, M, E, O] { val features: FeatureSlots.this.type } =
     bind[Unit, M, E, O](
       policy,
       state,
@@ -239,7 +240,7 @@ abstract class ChildFeatures[Context] {
 
   final def init[I, M, E, O](
       state: State,
-      child: Child[I, M, E, O],
+      child: Slot[I, M, E, O],
       input: I,
       policy: Policy
   )(using
@@ -249,7 +250,7 @@ abstract class ChildFeatures[Context] {
 
   final def view(
       state: State,
-      child: Child[?, ?, ?, ?],
+      child: Slot[?, ?, ?, ?],
       dispatch: Event => Unit,
       empty: => ReactElement
   )(using
@@ -276,7 +277,7 @@ abstract class ChildFeatures[Context] {
     else Transition.unchanged(state)
 }
 
-object ChildFeatures {
+object FeatureSlots {
   // Allocated at registration, not during pure state transitions or rendering.
   // Shared across groups so their children can also be rendered as siblings.
   private var lastViewId = 0L

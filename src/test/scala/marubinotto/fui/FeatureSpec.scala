@@ -14,8 +14,8 @@ object FeatureExamples {
       model.toString
     )
   }
-  object Left extends ChildFeatures[Unit] { val counter = child(Counter) }
-  object Right extends ChildFeatures[Unit] { val counter = child(Counter) }
+  object Left extends FeatureSlots[Unit] { val counter = slot(Counter) }
+  object Right extends FeatureSlots[Unit] { val counter = slot(Counter) }
   case class Model(
       left: Left.State = Left.empty,
       right: Right.State = Right.empty,
@@ -115,8 +115,8 @@ class FeatureSpec extends AnyFunSuite {
     assert(Left.counter.model(next.model.left).isEmpty)
   }
 
-  test("nested ChildFeatures groups reject events from a previous ancestor") {
-    object Outer extends ChildFeatures[Unit] { val counters = child(feature) }
+  test("nested FeatureSlots groups reject events from a previous ancestor") {
+    object Outer extends FeatureSlots[Unit] { val counters = slot(feature) }
     val first = Outer.init(Outer.empty, Outer.counters, (), Outer.policy())
     val inside = Outer.counters.model(first.model).get
     val childMsg = Msg.LeftEvent(Left.counter.event(inside.left, 1).get)
@@ -132,8 +132,8 @@ class FeatureSpec extends AnyFunSuite {
     )
     val changedInner = left.init(current, Left.counter, 20).model
     // Keep the outer visit, but replace an inner visit before its old message arrives.
-    object Container extends ChildFeatures[Unit] {
-      val item = child(new Feature[Model, Unit, Model, Msg, Nothing] {
+    object Container extends FeatureSlots[Unit] {
+      val item = slot(new Feature[Model, Unit, Model, Msg, Nothing] {
         def init(input: Model, context: Unit): Transition[Model, Msg, Nothing] =
           Transition(input)
         def update(msg: Msg, model: Model, context: Unit) =
@@ -160,8 +160,8 @@ class FeatureSpec extends AnyFunSuite {
     val before = PartialModel(1)("before")
     val after = PartialModel(1)("after")
     assert(before == after)
-    object Slot extends ChildFeatures[Unit] {
-      val item = child(new Feature[Unit, Unit, PartialModel, Unit, Nothing] {
+    object Slot extends FeatureSlots[Unit] {
+      val item = slot(new Feature[Unit, Unit, PartialModel, Unit, Nothing] {
         def init(
             input: Unit,
             context: Unit
@@ -182,12 +182,12 @@ class FeatureSpec extends AnyFunSuite {
     assert(Slot.item.model(next.model).get.text == "after")
   }
 
-  test("a ChildFeatures group cannot be registered twice in the same parent") {
+  test("a FeatureSlots group cannot be registered twice in the same parent") {
     intercept[IllegalArgumentException](feature.withFeatures(left))
   }
 
   test(
-    "ChildFeatures addresses, states, children and inputs are statically distinct"
+    "FeatureSlots addresses, states, children and inputs are statically distinct"
   ) {
     assertDoesNotCompile("""
       import marubinotto.fui.FeatureExamples.*

@@ -3,7 +3,7 @@ package marubinotto.fui
 import org.scalatest.funsuite.AnyFunSuite
 import slinky.web.html.div
 
-object ChildFeaturesExamples {
+object FeatureSlotsExamples {
   object Count extends Feature[Int, Unit, Int, Int, Int] {
     def init(input: Int, context: Unit) =
       Transition(input, outputs = List(input))
@@ -21,12 +21,12 @@ object ChildFeaturesExamples {
       model
     )
   }
-  object Children extends ChildFeatures[Unit] {
-    val a = child(Count)
-    val b = child(Count)
-    val c = child(Count)
-    val d = child(Count)
-    val text = child(Text)
+  object Children extends FeatureSlots[Unit] {
+    val a = slot(Count)
+    val b = slot(Count)
+    val c = slot(Count)
+    val d = slot(Count)
+    val text = slot(Text)
   }
   val rules = Children.policy(
     Children.exclusive(Children.a, Children.b),
@@ -57,8 +57,8 @@ object ChildFeaturesExamples {
   )
 }
 
-class ChildFeaturesSpec extends AnyFunSuite {
-  import ChildFeaturesExamples.*
+class FeatureSlotsSpec extends AnyFunSuite {
+  import FeatureSlotsExamples.*
 
   test(
     "default policy keeps differently typed children independent through one binding"
@@ -160,26 +160,26 @@ class ChildFeaturesSpec extends AnyFunSuite {
     "foreign children and policies, wrong inputs and messages are rejected statically"
   ) {
     assertDoesNotCompile("""
-      import marubinotto.fui.ChildFeaturesExamples.*
-      object Foreign extends marubinotto.fui.ChildFeatures[Unit] { val a = child(Count) }
+      import marubinotto.fui.FeatureSlotsExamples.*
+      object Foreign extends marubinotto.fui.FeatureSlots[Unit] { val a = slot(Count) }
       Children.exclusive(Children.a, Foreign.a)
     """)
     assertDoesNotCompile("""
-      import marubinotto.fui.ChildFeaturesExamples.*
-      object Foreign extends marubinotto.fui.ChildFeatures[Unit] { val a = child(Count) }
+      import marubinotto.fui.FeatureSlotsExamples.*
+      object Foreign extends marubinotto.fui.FeatureSlots[Unit] { val a = slot(Count) }
       Children.policy(Foreign.exclusive(Foreign.a, Foreign.a))
     """)
     assertDoesNotCompile("""
-      import marubinotto.fui.ChildFeaturesExamples.*
-      object Foreign extends marubinotto.fui.ChildFeatures[Unit]
+      import marubinotto.fui.FeatureSlotsExamples.*
+      object Foreign extends marubinotto.fui.FeatureSlots[Unit]
       binding(Foreign.policy())
     """)
     assertDoesNotCompile("""
-      import marubinotto.fui.ChildFeaturesExamples.*
+      import marubinotto.fui.FeatureSlotsExamples.*
       binding(rules).init(Model(), Children.a, "wrong")
     """)
     assertDoesNotCompile("""
-      import marubinotto.fui.ChildFeaturesExamples.*
+      import marubinotto.fui.FeatureSlotsExamples.*
       Children.text.event(Children.empty, 123)
     """)
   }
@@ -231,8 +231,8 @@ class ChildFeaturesSpec extends AnyFunSuite {
         callback = dispatch; div(model.toString)
       }
     }
-    object Views extends ChildFeatures[Unit] {
-      val one = child(clickable); val two = child(clickable)
+    object Views extends FeatureSlots[Unit] {
+      val one = slot(clickable); val two = slot(clickable)
     }
     case class ViewModel(state: Views.State = Views.empty)
     val connected = Views.bind[ViewModel, Views.Event, Nothing](

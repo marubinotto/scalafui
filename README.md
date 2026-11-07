@@ -536,9 +536,10 @@ a part of the application has its own state transitions or work to manage.
 
 - A **Feature** defines initialization, updates, and rendering. It can be reused
   without sharing state.
-- A **ChildFeatures** group declares named children with `child(feature)`. Each registration
-  holds at most one active instance; registering the same Feature twice gives two
-  independent children.
+- A **FeatureSlots** group declares named logical slots with `slot(feature)`. Each slot
+  holds at most one active instance of its registered Feature; registering the same
+  Feature twice gives two independent slots. Slots identify places in the parent
+  state, not positions in the DOM.
 - A **policy** describes coexistence separately from registration. Children coexist
   by default. Each `exclusive(a, b, ...)` group permits at most one active member;
   different groups can be active simultaneously.
@@ -548,7 +549,7 @@ a part of the application has its own state transitions or work to manage.
 All child Models remain in the parent's state tree. One Runtime processes the
 messages; children do not create additional stores or message loops. Definitions
 and bindings are stable values, not mutable stores. Features can contain nested
-ChildFeatures groups. Neither the set nor its policy determines DOM placement or display order.
+FeatureSlots groups. Neither the set nor its policy determines DOM placement or display order.
 
 ### Defining a feature
 
@@ -623,14 +624,14 @@ provides read-only external data for each `init`, `update`, or `view` call. Cont
 is not stored in child state. Changing context does not reinitialize the child or
 invoke `update`; the next call receives the value supplied by its owner.
 
-A group declares its shared context type with `ChildFeatures[Context]`. A binding
+A group declares its shared context type with `FeatureSlots[Context]`. A binding
 projects that context from the parent's **current** model and context:
 
 ```scala
 // Detail is a Feature[String, DetailContext, Detail.Model, Detail.Msg, Detail.Out].
 case class DetailContext(locale: String, canEdit: Boolean)
-object Details extends ChildFeatures[DetailContext] {
-  val detail = child(Detail)
+object Details extends FeatureSlots[DetailContext] {
+  val detail = slot(Detail)
 }
 // ParentModel contains details: Details.State and canEdit: Boolean.
 // ParentContext contains locale: String; ParentMsg.Child wraps Details.Event.
@@ -657,7 +658,7 @@ the current update. A command still captures any values used when it was created
 its reply is processed with the context supplied when that reply is handled.
 
 A child need not depend on a global context type. Adapt a narrower feature when
-registering it, for example `child(editor.mapContextFrom[AppContext](_.editor))`.
+registering it, for example `slot(editor.mapContextFrom[AppContext](_.editor))`.
 The projection applies to initialization, updates, and rendering. Directly using
 the application's context type is also supported.
 
@@ -669,8 +670,8 @@ context from the current application model using `(model, _: Unit) => ...`.
 
 ### Connecting a child to its parent
 
-Register children in a stable ChildFeatures definition. Each set has its own `State`,
-`Event`, `Output`, `Child`, and `Policy` types. Children and policies from another
+Register slots in a stable FeatureSlots definition. Each set has its own `State`,
+`Event`, `Output`, `Slot`, and `Policy` types. Children and policies from another
 set cannot be used in its binding.
 
 `bind` requires a policy and describes how to read and replace child state, wrap
@@ -687,9 +688,9 @@ it during binding construction. Returning to Search resets the query in this exa
 ```scala
 import org.scalajs.dom.URL
 
-object Pages extends ChildFeatures[Unit] {
-  val search = child(Search)
-  val work = child(Work)
+object Pages extends FeatureSlots[Unit] {
+  val search = slot(Search)
+  val work = slot(Work)
 }
 
 case class Model(page: Pages.State = Pages.empty)
@@ -751,7 +752,7 @@ These replace the former `open` and `close` names; `clear` is unchanged.
 `remove` removes only the specified child; `clear` removes all children in the set. When initializing several
 children in one transition, pass each resulting Model to the next operation and
 combine their commands with `++`; do not discard earlier commands. Low-level
-`ChildFeatures.init(state, child, input, policy)` returns a set transition, including its initial outputs;
+`FeatureSlots.init(state, child, input, policy)` returns a set transition, including its initial outputs;
 prefer `FeatureBinding.init` to perform the parent integration automatically.
 
 ### Multiple independent exclusive groups
@@ -759,12 +760,12 @@ prefer `FeatureBinding.init` to perform the parent integration automatically.
 A set can mix concurrent children with any number of independent exclusive groups:
 
 ```scala
-object AppFeatures extends ChildFeatures[Unit] {
-  val primarySearch = child(Search)
-  val primaryWork = child(Work)
-  val secondarySearch = child(Search)
-  val secondaryWork = child(Work)
-  val sidebarSearch = child(Search)
+object AppFeatures extends FeatureSlots[Unit] {
+  val primarySearch = slot(Search)
+  val primaryWork = slot(Work)
+  val secondarySearch = slot(Search)
+  val secondaryWork = slot(Work)
+  val sidebarSearch = slot(Search)
 }
 
 val coexistence = AppFeatures.policy(
@@ -846,7 +847,7 @@ and concurrent children's states and event addresses remain valid.
 Use `remove` or `clear` on existing state to retain generation history; `empty` is
 only for initial state, never for resetting an existing set.
 
-Rendering through `ChildFeatures.view` or a binding's `view` also gives each child
+Rendering through `FeatureSlots.view` or a binding's `view` also gives each child
 visit its own React identity, without adding a DOM wrapper. Ordinary updates
 preserve component-local state at the same position in the tree; reinitializing a
 child or replacing it with another child remounts its view and runs the old
@@ -863,7 +864,7 @@ flowchart LR
   old["Old child starts Cmd"] --> work["IO continues running"]
   old --> replace["Close or replace child"]
   replace --> current["Inactive child or new generation"]
-  work -- "result Msg" --> check["ChildFeatures checks child and generation"]
+  work -- "result Msg" --> check["FeatureSlots checks child and generation"]
   current --> check
   check -- "old address" --> discard["Ignore: no state change, Cmd or Out"]
   check -- "current address" --> update["Child update"]
@@ -900,12 +901,22 @@ Search emits `QueryChanged` and `OpenWork`,
 and Main owns URL changes. The example's former `pageSerial` and manual child
 message routing are handled by the feature connection.
 
+### Migrating from ChildFeatures
+
+This is a naming-only breaking API change; no compatibility aliases are provided.
+
+- Replace `ChildFeatures[Context]` with `FeatureSlots[Context]`.
+- Replace `child(feature)` with `slot(feature)` and `Child[I, M, E, O]` with
+  `Slot[I, M, E, O]`.
+- State, event routing, lifecycle, coexistence policies, and rendering behavior
+  are unchanged. `FeatureBinding.features` and `withFeatures` keep their names.
+
 ### Migrating from FeatureSlot
 
 This is a breaking API change; no compatibility wrapper is provided.
 
-- Replace `extends FeatureSlot` with `extends ChildFeatures[Unit]` and `variant(feature)`
-  with `child(feature)`. Typed references are now `Child[I, M, E, O]`.
+- Replace `extends FeatureSlot` with `extends FeatureSlots[Unit]` and `variant(feature)`
+  with `slot(feature)`. Typed references are now `Slot[I, M, E, O]`.
 - Supply `policy` explicitly to `bind`. To preserve the old replacement behavior
   for two or more children, put them all in one `exclusive` group. For one child,
   use `policy()`; reinitializing that child still replaces its instance.

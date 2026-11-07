@@ -5,7 +5,7 @@ import cats.effect.unsafe.implicits.global
 import org.scalatest.funsuite.AsyncFunSuite
 
 class FeatureBindingMessageSpec extends AsyncFunSuite {
-  import ChildFeaturesExamples.*
+  import FeatureSlotsExamples.*
 
   override implicit def executionContext: scala.concurrent.ExecutionContext =
     org.scalajs.macrotaskexecutor.MacrotaskExecutor
@@ -122,21 +122,21 @@ class FeatureBindingMessageSpec extends AsyncFunSuite {
 
   test("message and send reject foreign children and incorrect payload types") {
     assertDoesNotCompile("""
-      import marubinotto.fui.ChildFeaturesExamples.*
-      object Foreign extends marubinotto.fui.ChildFeatures[Unit] { val a = child(Count) }
+      import marubinotto.fui.FeatureSlotsExamples.*
+      object Foreign extends marubinotto.fui.FeatureSlots[Unit] { val a = slot(Count) }
       binding(rules).message(Model(), Foreign.a, 1)
     """)
     assertDoesNotCompile("""
-      import marubinotto.fui.ChildFeaturesExamples.*
-      object Foreign extends marubinotto.fui.ChildFeatures[Unit] { val a = child(Count) }
+      import marubinotto.fui.FeatureSlotsExamples.*
+      object Foreign extends marubinotto.fui.FeatureSlots[Unit] { val a = slot(Count) }
       binding(rules).send(Model(), Foreign.a, 1)
     """)
     assertDoesNotCompile("""
-      import marubinotto.fui.ChildFeaturesExamples.*
+      import marubinotto.fui.FeatureSlotsExamples.*
       binding(rules).message(Model(), Children.text, 1)
     """)
     assertDoesNotCompile("""
-      import marubinotto.fui.ChildFeaturesExamples.*
+      import marubinotto.fui.FeatureSlotsExamples.*
       binding(rules).send(Model(), Children.a, "wrong")
     """)
   }

@@ -51,8 +51,8 @@ class FeatureRuntimeSpec extends AsyncFunSuite {
         model.toString
       )
     }
-    object Content extends ChildFeatures[Unit] {
-      val leaf = this.child(App.this.leaf); val peer = this.child(App.this.leaf)
+    object Content extends FeatureSlots[Unit] {
+      val leaf = this.slot(App.this.leaf); val peer = this.slot(App.this.leaf)
     }
     case class Model(content: Content.State = Content.empty)
     enum Msg {

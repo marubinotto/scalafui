@@ -55,14 +55,14 @@ trait Feature[Input, Context, Model, Msg, Out] { self =>
   ): ReactElement =
     view(model, unit(()), dispatch)
 
-  private[fui] def childFeatureGroups: Set[ChildFeatures[?]] = Set.empty
+  private[fui] def childFeatureGroups: Set[FeatureSlots[?]] = Set.empty
 
   final def withFeatures(
       child: FeatureBinding[Context, Model, Msg, Out]
   ): Feature[Input, Context, Model, Msg, Out] = {
     require(
       !childFeatureGroups.contains(child.features),
-      "A ChildFeatures group can only be bound once within a feature"
+      "A FeatureSlots group can only be bound once within a feature"
     )
     new Feature[Input, Context, Model, Msg, Out] {
       def init(input: Input, context: Context) = self.init(input, context)
@@ -78,11 +78,11 @@ trait Feature[Input, Context, Model, Msg, Out] { self =>
   }
 }
 
-/** A typed connection between one ChildFeatures group and its parent's
+/** A typed connection between one FeatureSlots group and its parent's
   * state/messages.
   */
 trait FeatureBinding[Context, Model, Msg, Out] {
-  val features: ChildFeatures[?]
+  val features: FeatureSlots[?]
   protected def childContext(
       model: Model,
       context: Context
@@ -100,7 +100,7 @@ trait FeatureBinding[Context, Model, Msg, Out] {
 
   final def init[I, M, E, O](
       model: Model,
-      child: features.Child[I, M, E, O],
+      child: features.Slot[I, M, E, O],
       input: I,
       context: Context
   ): Transition[Model, Msg, Out] =
@@ -118,7 +118,7 @@ trait FeatureBinding[Context, Model, Msg, Out] {
 
   final def remove(
       model: Model,
-      child: features.Child[?, ?, ?, ?]
+      child: features.Slot[?, ?, ?, ?]
   ): Transition[Model, Msg, Out] =
     Transition(replace(model, features.remove(state(model), child)))
 
@@ -131,7 +131,7 @@ trait FeatureBinding[Context, Model, Msg, Out] {
     */
   final def message[I, M, E, O](
       model: Model,
-      child: features.Child[I, M, E, O],
+      child: features.Slot[I, M, E, O],
       msg: E
   ): Option[Msg] =
     child.event(state(model), msg).map(wrap)
@@ -142,14 +142,14 @@ trait FeatureBinding[Context, Model, Msg, Out] {
     */
   final def send[I, M, E, O](
       model: Model,
-      child: features.Child[I, M, E, O],
+      child: features.Slot[I, M, E, O],
       msg: E
   ): Cmd[Msg] =
     message(model, child, msg).fold[Cmd[Msg]](Cmd.none)(Browser.send(_))
 
   final def view(
       model: Model,
-      child: features.Child[?, ?, ?, ?],
+      child: features.Slot[?, ?, ?, ?],
       dispatch: Msg => Unit,
       empty: => ReactElement,
       context: Context
@@ -164,7 +164,7 @@ trait FeatureBinding[Context, Model, Msg, Out] {
 
   final def init[I, M, E, O](
       model: Model,
-      child: features.Child[I, M, E, O],
+      child: features.Slot[I, M, E, O],
       input: I
   )(using
       unit: Unit =:= Context
@@ -172,7 +172,7 @@ trait FeatureBinding[Context, Model, Msg, Out] {
 
   final def view(
       model: Model,
-      child: features.Child[?, ?, ?, ?],
+      child: features.Slot[?, ?, ?, ?],
       dispatch: Msg => Unit,
       empty: => ReactElement
   )(using

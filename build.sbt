@@ -78,3 +78,9 @@ lazy val exampleFuidungeon = project
   .enablePlugins(ScalaJSPlugin)
   .settings(commonSettings)
   .dependsOn(scalafui)
+
+lazy val exampleFeatureWorkspace = project
+  .in(file("examples/feature-workspace"))
+  .enablePlugins(ScalaJSPlugin)
+  .settings(commonSettings)
+  .dependsOn(scalafui)

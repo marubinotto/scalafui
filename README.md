@@ -156,6 +156,22 @@ $ yarn run dev
 sbt> ~exampleMultipage/fastLinkJS
 ```
 
+### Feature Workspace
+
+* The same Feature in two independent slots, with nested children, exclusive note
+  views, child outputs, and delayed results that respect instance lifetimes.
+* [Setup, code guide, and things to try](examples/feature-workspace/README.md)
+
+```console
+$ cd examples/feature-workspace
+$ yarn
+$ yarn run dev
+```
+
+```console
+sbt> ~exampleFeatureWorkspace/fastLinkJS
+```
+
 ### Stopwatch
 
 * An example of subscription which allows us to listen to external events

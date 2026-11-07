@@ -756,6 +756,11 @@ The single `withFeatures(pageBinding)` call connects both registered children.
 Selecting a search result emits `OpenWork(id)`; the parent initializes Work. The Back
 button emits `Work.Out.Back`; the parent initializes Search again.
 
+Use `pageBinding.isActive(model, Pages.search)` to check whether a slot is active,
+or `pageBinding.model(model, Pages.search)` to read its typed `Option[Search.Model]`.
+Both queries read the supplied parent state without initializing the slot or
+evaluating child context. Inactive slots return `false` and `None`, respectively.
+
 Pass the resulting `Program` to `Browser.run`, `Browser.mount`, or `Runtime.make`
 as usual. `FeatureProgram` also accepts `subscriptions` and `onUrlChange`.
 For nesting, attach a connection to a `Feature` with `withFeatures` and register the

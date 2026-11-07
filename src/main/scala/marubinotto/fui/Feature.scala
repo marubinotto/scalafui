@@ -109,6 +109,20 @@ trait FeatureBinding[Context, Model, Msg, Out] {
       context: Context
   ): Transition[Model, Msg, Out]
 
+  /** Read the active slot's model without evaluating its context. */
+  final def model[I, M, E, O](
+      parent: Model,
+      slot: features.Slot[I, M, E, O]
+  ): Option[M] =
+    slot.model(state(parent))
+
+  /** Whether the slot has an active instance in this parent state. */
+  final def isActive(
+      parent: Model,
+      slot: features.Slot[?, ?, ?, ?]
+  ): Boolean =
+    slot.model(state(parent)).isDefined
+
   final def init[I, M, E, O](
       model: Model,
       child: features.Slot[I, M, E, O],

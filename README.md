@@ -686,6 +686,21 @@ the application's context type is also supported.
 
 Use `Unit` for features without external context. Their `init(input)`,
 `update(msg, model)`, and `view(model, dispatch)` convenience calls remain available.
+To omit context parameters in the definition too, use the function-based constructor:
+
+```scala
+val counter = Feature.withoutContext[Int, Int, Int, Nothing](
+  init = initial => Transition(initial),
+  update = (delta, count) => Transition(count + delta),
+  view = (count, dispatch) =>
+    button(onClick := (_ => dispatch(1)))(count.toString)
+)
+```
+
+This returns an ordinary `Feature[Int, Unit, Int, Int, Nothing]`, supporting
+`slot(counter)`, `withFeatures`, and `mapContextFrom` as usual. Trait-based
+definitions remain available.
+
 Groups and bindings with `Unit` context also offer context-free calls.
 `FeatureProgram` uses `Unit` as its root context; a root binding can derive a child
 context from the current application model using `(model, _: Unit) => ...`.

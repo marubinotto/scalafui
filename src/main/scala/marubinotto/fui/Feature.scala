@@ -89,6 +89,25 @@ trait Feature[Input, Context, Model, Msg, Out] { self =>
   }
 }
 
+object Feature {
+  /** Define a feature whose callbacks need no external context. */
+  def withoutContext[I, M, E, O](
+      init: I => Transition[M, E, O],
+      update: (E, M) => Transition[M, E, O],
+      view: (M, E => Unit) => ReactElement
+  ): Feature[I, Unit, M, E, O] = {
+    val initialize = init
+    val reduce = update
+    val render = view
+    new Feature[I, Unit, M, E, O] {
+      def init(input: I, context: Unit) = initialize(input)
+      def update(msg: E, model: M, context: Unit) = reduce(msg, model)
+      def view(model: M, context: Unit, dispatch: E => Unit) =
+        render(model, dispatch)
+    }
+  }
+}
+
 /** A typed connection between one FeatureSlots group and its parent's
   * state/messages.
   */

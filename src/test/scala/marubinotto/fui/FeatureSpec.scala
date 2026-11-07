@@ -74,6 +74,43 @@ object FeatureExamples {
 class FeatureSpec extends AnyFunSuite {
   import FeatureExamples.*
 
+  test("withoutContext preserves transitions, rendering and dispatch") {
+    val initial = Transition(2, Browser.send(3), List("initialized"))
+    val changed = Transition(5, Browser.send(4), List("updated"))
+    val rendered: slinky.core.facade.ReactElement = div("counter")
+    var received = 0
+    val counter = Feature.withoutContext[Int, Int, Int, String](
+      init = input => { assert(input == 2); initial },
+      update = (msg, model) => {
+        assert(msg == 3 && model == 2)
+        changed
+      },
+      view = (model, dispatch) => {
+        assert(model == 5)
+        dispatch(7)
+        rendered
+      }
+    )
+    assert(counter.init(2) == initial)
+    assert(counter.update(3, 2) == changed)
+    assert(counter.view(5, msg => received = msg) == rendered)
+    assert(received == 7)
+    assert(counter.mapContextFrom[String](_ => ()).init(2, "context") == initial)
+  }
+
+  test("withoutContext composes bindings and routes child events") {
+    val composed = Feature.withoutContext[Unit, Model, Msg, Nothing](
+      init = _ => feature.init(()),
+      update = (_, _) => throw new AssertionError("parent called"),
+      view = (_, _) => div()
+    ).withFeatures(left).withFeatures(right)
+    val initial = composed.init(()).model
+    val event = Msg.LeftEvent(Left.counter.event(initial.left, 3).get)
+    val next = composed.update(event, initial).model
+    assert(Left.counter.model(next.left).contains(4))
+    assert(next.log == List(1, 10, 4, 3))
+  }
+
   test(
     "initial outputs see installed state and child output order is preserved"
   ) {

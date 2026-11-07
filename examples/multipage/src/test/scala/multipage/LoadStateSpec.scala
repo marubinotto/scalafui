@@ -3,14 +3,15 @@ package multipage
 import org.scalatest.funsuite.AnyFunSuite
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
-import slinky.core.facade.ReactElement
+import marubinotto.react.ReactNode
 import multipage.page.{Search, Work}
 
 @js.native
 @JSImport("react-dom/server", "renderToStaticMarkup")
-private object renderMarkup extends js.Function1[ReactElement, String] {
-  def apply(element: ReactElement): String = js.native
+private object RawMarkup extends js.Function1[js.Any, String] {
+  def apply(element: js.Any): String = js.native
 }
+private def renderMarkup(element: ReactNode): String = RawMarkup(ReactNode.toJs(element))
 
 class LoadStateSpec extends AnyFunSuite {
   test("a failed work request shows its error without leaving the work loading indicator") {

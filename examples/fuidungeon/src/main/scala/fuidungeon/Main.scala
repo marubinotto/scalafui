@@ -1,14 +1,12 @@
 package fuidungeon
 
-import scala.scalajs.LinkingInfo
 import scala.concurrent.duration.DurationInt
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import org.scalajs.dom
 import org.scalajs.dom.URL
-import slinky.core.facade.ReactElement
-import slinky.hot
-import slinky.web.html.*
+import marubinotto.react.ReactNode
+import marubinotto.react.html.*
 import marubinotto.fui.*
 import Game.*
 
@@ -100,14 +98,14 @@ object Main {
     case _ => None
   }
 
-  def view(model: Model, dispatch: Msg => Unit): ReactElement =
+  def view(model: Model, dispatch: Msg => Unit): ReactNode =
     div(className := "shell")(
       header(className := "masthead")(
         p(className := "eyebrow")("SCALAFUI / PLAYABLE EXAMPLE"),
         h1("fui", span("dungeon")),
         p(className := "intro")("Find the key. Descend deeper. Stay alive.")
       ),
-      model.game.fold[ReactElement](div(className := "loading", role := "status")("Preparing the dungeon…")) { game =>
+      model.game.fold[ReactNode](div(className := "loading", role := "status")("Preparing the dungeon…")) { game =>
         div(className := "game-layout")(
           viewBoard(model, game, dispatch),
           viewSidebar(model, game, dispatch)
@@ -135,7 +133,7 @@ object Main {
         }
     }
 
-  private def viewBoard(model: Model, game: State, dispatch: Msg => Unit): ReactElement = {
+  private def viewBoard(model: Model, game: State, dispatch: Msg => Unit): ReactNode = {
     val wide = Camera.offset(game.board, game.player, 15)
     val narrow = Camera.offset(game.board, game.player, 9)
     val mapStyle = scala.scalajs.js.Dynamic.literal(
@@ -175,9 +173,9 @@ object Main {
     )
   }
 
-  private def viewSidebar(model: Model, game: State, dispatch: Msg => Unit): ReactElement = {
+  private def viewSidebar(model: Model, game: State, dispatch: Msg => Unit): ReactNode = {
     val playing = game.status == Status.Playing && model.playback.isEmpty
-    def control(label: String, action: Action, css: String): ReactElement =
+    def control(label: String, action: Action, css: String): ReactNode =
       button(className := s"control $css", disabled := !playing,
         onClick := (_ => dispatch(Act(action))))(label)
     aside(className := "sidebar")(
@@ -218,6 +216,6 @@ object Main {
 
   def main(args: Array[String]): Unit = run.unsafeRunAndForget()
   def run: IO[Unit] =
-    IO { if (LinkingInfo.developmentMode) hot.initialize() } *>
+    IO.unit *>
       Browser.run(dom.document.getElementById("app"), Program(init, view, update, subscriptions))
 }

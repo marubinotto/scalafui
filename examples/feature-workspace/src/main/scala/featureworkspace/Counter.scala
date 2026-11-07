@@ -3,8 +3,8 @@ package featureworkspace
 import cats.effect.IO
 import marubinotto.fui.*
 import scala.concurrent.duration.*
-import slinky.core.facade.ReactElement
-import slinky.web.html.*
+import marubinotto.react.ReactNode
+import marubinotto.react.html.*
 
 object Counter extends Feature[Unit, Unit, Counter.Model, Counter.Msg, Nothing] {
   case class Model(value: Int = 0, pending: Boolean = false)
@@ -30,7 +30,7 @@ object Counter extends Feature[Unit, Unit, Counter.Model, Counter.Msg, Nothing] 
       case _ => Transition.unchanged(model)
     }
 
-  def view(model: Model, context: Unit, dispatch: Msg => Unit): ReactElement =
+  def view(model: Model, context: Unit, dispatch: Msg => Unit): ReactNode =
     div(className := "counter")(
       div(className := "counter-value")(model.value.toString),
       div(className := "counter-actions")(

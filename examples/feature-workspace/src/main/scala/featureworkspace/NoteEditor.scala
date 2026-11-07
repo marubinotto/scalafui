@@ -1,8 +1,8 @@
 package featureworkspace
 
 import marubinotto.fui.*
-import slinky.core.facade.ReactElement
-import slinky.web.html.*
+import marubinotto.react.ReactNode
+import marubinotto.react.html.*
 
 object NoteEditor extends Feature[String, Unit, String, NoteEditor.Msg, NoteEditor.Out] {
   enum Msg {
@@ -19,13 +19,13 @@ object NoteEditor extends Feature[String, Unit, String, NoteEditor.Msg, NoteEdit
       case Msg.Changed(text) => Transition(text, outputs = List(Out.TextChanged(text)))
     }
 
-  def view(model: String, context: Unit, dispatch: Msg => Unit): ReactElement =
+  def view(model: String, context: Unit, dispatch: Msg => Unit): ReactNode =
     label(className := "note-editor")(
       span(className := "field-label")("Your note"),
       textarea(
         value := model,
         placeholder := "Write something for this workspace…",
-        onChange := (event => dispatch(Msg.Changed(event.target.value)))
+        onChange := (event => dispatch(Msg.Changed(event.currentTarget.value)))
       )
     )
 }

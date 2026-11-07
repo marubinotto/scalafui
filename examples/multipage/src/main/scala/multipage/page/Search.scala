@@ -1,8 +1,8 @@
 package multipage.page
 
 import scala.concurrent.duration.*
-import slinky.core.facade.ReactElement
-import slinky.web.html.*
+import marubinotto.react.ReactNode
+import marubinotto.react.html.*
 
 import marubinotto.fui.*
 import cats.effect.IO
@@ -105,7 +105,7 @@ object Search
   // VIEW
   //
 
-  def view(model: Model, context: Unit, dispatch: Msg => Unit): ReactElement = {
+  def view(model: Model, context: Unit, dispatch: Msg => Unit): ReactNode = {
     div(className := "search")(
       h1("Book Search"),
       div(className := "search-query")(
@@ -113,7 +113,7 @@ object Search
           `type` := "text",
           placeholder := "Title or Author Name (e.g. Haruki)",
           value := model.query,
-          onChange := ((e) => dispatch(QueryInput(e.target.value)))
+          onChange := ((e) => dispatch(QueryInput(e.currentTarget.value)))
         )
       ),
       model.works match {

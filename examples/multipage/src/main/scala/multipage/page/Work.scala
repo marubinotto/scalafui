@@ -2,8 +2,8 @@ package multipage.page
 
 import scala.scalajs.js
 
-import slinky.core.facade.ReactElement
-import slinky.web.html.*
+import marubinotto.react.ReactNode
+import marubinotto.react.html.*
 
 import marubinotto.fui.*
 
@@ -70,7 +70,7 @@ object Work extends Feature[String, Unit, Work.Model, Work.Msg, Nothing] {
       model: Model,
       context: Unit,
       @scala.annotation.unused dispatch: Msg => Unit
-  ): ReactElement =
+  ): ReactNode =
     div(className := "work-container")(
       model.work match {
         case LoadState.Loaded(work) => viewWork(work)
@@ -96,7 +96,7 @@ object Work extends Feature[String, Unit, Work.Model, Work.Msg, Nothing] {
       )
     )
 
-  def viewWork(work: domain.Work): ReactElement =
+  def viewWork(work: domain.Work): ReactNode =
     div(className := "work")(
       h1(className := "title")(work.title),
       div(className := "author")(work.authors.map(_.mkString(", "))),
@@ -108,7 +108,7 @@ object Work extends Feature[String, Unit, Work.Model, Work.Msg, Nothing] {
       )
     )
 
-  def viewEdition(edition: domain.Edition): ReactElement =
+  def viewEdition(edition: domain.Edition): ReactNode =
     div(className := "edition")(
       div(className := "title")(edition.title),
       div(className := "covers")(

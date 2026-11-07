@@ -1,11 +1,9 @@
 package multipage
 
-import scala.scalajs.LinkingInfo
 import org.scalajs.dom
 import org.scalajs.dom.URL
-import slinky.core.facade.ReactElement
-import slinky.hot
-import slinky.web.html.*
+import marubinotto.react.ReactNode
+import marubinotto.react.html.*
 import marubinotto.fui.*
 import marubinotto.router.*
 import cats.effect.IO
@@ -80,7 +78,7 @@ object Main {
       case Msg.PageEvent(_)    => Transition.unchanged(model)
     }
 
-  def view(model: Model, dispatch: Msg => Unit): ReactElement =
+  def view(model: Model, dispatch: Msg => Unit): ReactNode =
     div(className := "app")(
       div(className := "app-header")(),
       if (Pages.search.model(model.page).isDefined)
@@ -104,6 +102,6 @@ object Main {
   def main(args: Array[String]): Unit = run.unsafeRunAndForget()
 
   def run: IO[Unit] =
-    IO { if (LinkingInfo.developmentMode) hot.initialize() } *>
+    IO.unit *>
       Browser.run(dom.document.getElementById("app"), program)
 }

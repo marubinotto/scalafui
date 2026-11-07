@@ -1,6 +1,5 @@
 package todo
 
-import scala.scalajs.LinkingInfo
 import scala.scalajs.js
 import scala.scalajs.js.timers.*
 import org.scalajs.dom
@@ -10,9 +9,8 @@ import org.scalajs.dom.URL
 import cats.effect.IO
 import com.softwaremill.quicklens.*
 
-import slinky.core.facade.ReactElement
-import slinky.hot
-import slinky.web.html.*
+import marubinotto.react.ReactNode
+import marubinotto.react.html.*
 
 import cats.effect.unsafe.implicits.global
 
@@ -157,7 +155,7 @@ object Main {
   // VIEW
   //
 
-  def view(model: Model, dispatch: Msg => Unit): ReactElement = {
+  def view(model: Model, dispatch: Msg => Unit): ReactNode = {
     div(className := "todomvc-wrapper")(
       section(className := "todoapp")(
         viewInput(model.taskInput, dispatch),
@@ -168,7 +166,7 @@ object Main {
     )
   }
 
-  def viewInput(taskInput: String, dispatch: Msg => Unit): ReactElement = {
+  def viewInput(taskInput: String, dispatch: Msg => Unit): ReactNode = {
     header(className := "header")(
       h1("todos"),
       input(
@@ -177,7 +175,7 @@ object Main {
         autoFocus := true,
         value := taskInput,
         name := "newTodo",
-        onInput := ((e) => dispatch(UpdateInput(e.target.value))),
+        onInput := ((e) => dispatch(UpdateInput(e.currentTarget.value))),
         onKeyDown := ((e) => {
           if (e.keyCode == 13) dispatch(Add) else ()
         })
@@ -189,7 +187,7 @@ object Main {
       entries: Seq[Entry],
       visibility: Visibility,
       dispatch: Msg => Unit
-  ): ReactElement = {
+  ): ReactNode = {
     val allCompleted = entries.forall(_.completed)
     val cssVisibility = if (entries.isEmpty) "hidden" else "visible"
 
@@ -212,7 +210,7 @@ object Main {
     )
   }
 
-  def viewEntry(entry: Entry, dispatch: Msg => Unit): ReactElement = {
+  def viewEntry(entry: Entry, dispatch: Msg => Unit): ReactNode = {
     li(
       className := optionalClasses(
         Seq(("completed", entry.completed), ("editing", entry.editing))
@@ -239,7 +237,7 @@ object Main {
         value := entry.description,
         name := "title",
         id := "todo-" + entry.id,
-        onInput := ((e) => dispatch(UpdateEntry(entry.id, e.target.value))),
+        onInput := ((e) => dispatch(UpdateEntry(entry.id, e.currentTarget.value))),
         onBlur := ((_) => dispatch(EditingEntry(entry.id, false))),
         onKeyDown := ((e) => {
           if (e.keyCode == 13) dispatch(EditingEntry(entry.id, false)) else ()
@@ -252,7 +250,7 @@ object Main {
       entries: Seq[Entry],
       visibility: Visibility,
       dispatch: Msg => Unit
-  ): ReactElement = {
+  ): ReactNode = {
     val entriesCompleted = entries.count(_.completed)
     val entriesLeft = entries.size - entriesCompleted
 
@@ -263,7 +261,7 @@ object Main {
     )
   }
 
-  def viewControlsCount(entriesLeft: Int): ReactElement = {
+  def viewControlsCount(entriesLeft: Int): ReactNode = {
     span(className := "todo-count")(
       strong(entriesLeft.toString()),
       (if (entriesLeft == 1) " item" else " items") + " left"
@@ -273,7 +271,7 @@ object Main {
   def viewControlsFilters(
       visibility: Visibility,
       dispatch: Msg => Unit
-  ): ReactElement = {
+  ): ReactNode = {
     ul(className := "filters")(
       visibilitySwap(Visibility.All, visibility, dispatch),
       " ",
@@ -287,7 +285,7 @@ object Main {
       visibility: Visibility,
       actualVisibility: Visibility,
       dispatch: Msg => Unit
-  ): ReactElement = {
+  ): ReactNode = {
     li(onClick := ((_) => dispatch(ChangeVisibility(visibility))))(
       a(
         href := visibility.uri,
@@ -301,7 +299,7 @@ object Main {
   def viewControlsClear(
       entriesCompleted: Int,
       dispatch: Msg => Unit
-  ): ReactElement = {
+  ): ReactNode = {
     button(
       className := "clear-completed",
       hidden := (entriesCompleted == 0),
@@ -309,7 +307,7 @@ object Main {
     )("Clear completed (" + entriesCompleted + ")")
   }
 
-  def infoFooter(): ReactElement = {
+  def infoFooter(): ReactNode = {
     footer(className := "info")(
       p("Double-click to edit a todo")
     )
@@ -323,11 +321,7 @@ object Main {
     run.unsafeRunAndForget()
 
   def run: IO[Unit] =
-    IO {
-      if (LinkingInfo.developmentMode) {
-        hot.initialize()
-      }
-    } *> {
+    IO.defer {
       Browser.run(
         dom.document.getElementById("app"),
         Program(init, view, update)

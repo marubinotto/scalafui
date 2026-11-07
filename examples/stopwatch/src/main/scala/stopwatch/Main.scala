@@ -1,15 +1,13 @@
 package stopwatch
 
 import scala.util.chaining.*
-import scala.scalajs.LinkingInfo
 import org.scalajs.dom
 import org.scalajs.dom.URL
 
 import scala.concurrent.duration.DurationInt
 
-import slinky.core.facade.ReactElement
-import slinky.hot
-import slinky.web.html.*
+import marubinotto.react.ReactNode
+import marubinotto.react.html.*
 
 import cats.effect.IO
 
@@ -98,7 +96,7 @@ object Main {
   // VIEW
   //
 
-  def view(model: Model, dispatch: Msg => Unit): ReactElement = {
+  def view(model: Model, dispatch: Msg => Unit): ReactNode = {
     val seconds = model.elapsedTotal.toDouble / 1000.0
     div(
       div(className := "elapsed-time")(
@@ -120,11 +118,7 @@ object Main {
     run.unsafeRunAndForget()
 
   def run: IO[Unit] =
-    IO {
-      if (LinkingInfo.developmentMode) {
-        hot.initialize()
-      }
-    } *> {
+    IO.defer {
       Browser.run(
         dom.document.getElementById("app"),
         Program(init, view, update, subscriptions)

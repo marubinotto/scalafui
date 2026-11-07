@@ -5,10 +5,8 @@ import cats.effect.unsafe.implicits.global
 import marubinotto.fui.*
 import org.scalajs.dom
 import org.scalajs.dom.URL
-import scala.scalajs.LinkingInfo
-import slinky.core.facade.ReactElement
-import slinky.hot
-import slinky.web.html.*
+import marubinotto.react.ReactNode
+import marubinotto.react.html.*
 
 object Main {
   object Slots extends FeatureSlots[Unit] {
@@ -54,8 +52,8 @@ object Main {
     case _ => Transition.unchanged(model)
   }
 
-  def view(model: Model, dispatch: Msg => Unit): ReactElement = {
-    def workspace(side: Side, title: String, number: String): ReactElement = {
+  def view(model: Model, dispatch: Msg => Unit): ReactNode = {
+    def workspace(side: Side, title: String, number: String): ReactNode = {
       val active = slotFor(side).model(model.workspaces).isDefined
       section(className := "workspace", aria-"label" := title)(
         header(className := "workspace-heading")(
@@ -100,6 +98,6 @@ object Main {
   def main(args: Array[String]): Unit = run.unsafeRunAndForget()
 
   def run: IO[Unit] =
-    IO { if (LinkingInfo.developmentMode) hot.initialize() } *>
+    IO.unit *>
       Browser.run(dom.document.getElementById("app"), program)
 }

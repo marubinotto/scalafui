@@ -1,12 +1,10 @@
-import scala.scalajs.LinkingInfo
 import org.scalajs.dom
 import org.scalajs.dom.URL
 
 import com.softwaremill.quicklens.*
 
-import slinky.core.facade.ReactElement
-import slinky.hot
-import slinky.web.html.*
+import marubinotto.react.ReactNode
+import marubinotto.react.html.*
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
@@ -55,13 +53,13 @@ object Main {
   // VIEW
   //
 
-  def view(model: Model, dispatch: Msg => Unit): ReactElement =
+  def view(model: Model, dispatch: Msg => Unit): ReactNode =
     div(
       h1("Welcome to Scalafui!"),
       form(className := "message-input")(
         input(
           value := model.input,
-          onInput := (e => dispatch(Input(e.target.value)))
+          onInput := (e => dispatch(Input(e.currentTarget.value)))
         ),
         button(
           `type` := "submit",
@@ -80,11 +78,7 @@ object Main {
     run.unsafeRunAndForget()
 
   def run: IO[Unit] =
-    IO {
-      if (LinkingInfo.developmentMode) {
-        hot.initialize()
-      }
-    } *> {
+    IO.defer {
       Browser.run(
         dom.document.getElementById("app"),
         Program(init, view, update)

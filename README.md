@@ -10,15 +10,13 @@ Scalafui is an experimental implementation of the Elm Architecture in Scala.js.
 The following code is an example of a minimal application implementation using Scalafui.
 
 ```scala
-import scala.scalajs.LinkingInfo
 import org.scalajs.dom
 import org.scalajs.dom.URL
 
 import com.softwaremill.quicklens._
 
-import slinky.core.facade.ReactElement
-import slinky.hot
-import slinky.web.html._
+import marubinotto.react.ReactNode
+import marubinotto.react.html._
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
@@ -64,13 +62,13 @@ object Main {
   // VIEW
   //
 
-  def view(model: Model, dispatch: Msg => Unit): ReactElement =
+  def view(model: Model, dispatch: Msg => Unit): ReactNode =
     div(
       h1("Welcome to Scalafui!"),
       form(className := "message-input")(
         input(
           value := model.input,
-          onInput := (e => dispatch(Input(e.target.value)))
+          onInput := (e => dispatch(Input(e.currentTarget.value)))
         ),
         button(
           `type` := "submit",
@@ -89,11 +87,7 @@ object Main {
     run.unsafeRunAndForget()
 
   def run: IO[Unit] =
-    IO {
-      if (LinkingInfo.developmentMode) {
-        hot.initialize()
-      }
-    } *> {
+    IO.defer {
       Browser.run(
         dom.document.getElementById("app"),
         Program(init, view, update)
@@ -261,7 +255,7 @@ to `Sub.Empty`, and URL change handling defaults to `None`.
 - **Model** is the application's state, usually an immutable case class.
 - **Msg** describes something that happened, such as input, a button click, or a
   completed request.
-- **View** turns the current Model into a Slinky `ReactElement`. Event handlers
+- **View** turns the current Model into a `marubinotto.react.ReactNode`. Event handlers
   use the supplied `dispatch: Msg => Unit` to send messages.
 - **Update** receives a message and the current Model, and returns the next Model
   together with commands to execute.
@@ -270,7 +264,7 @@ The application supplies these function signatures:
 
 ```scala
 def init(url: URL): (Model, Cmd[Msg])
-def view(model: Model, dispatch: Msg => Unit): ReactElement
+def view(model: Model, dispatch: Msg => Unit): ReactNode
 def update(msg: Msg, model: Model): (Model, Cmd[Msg])
 ```
 
@@ -427,8 +421,8 @@ and then starts the initial command. For each subsequent message, it calls
 `update`, renders the returned Model, schedules the returned commands, and
 reconciles subscriptions with that Model.
 
-Scalafui uses React 18 and creates one React root per Runtime. Keep `react` and
-`react-dom` aligned at version 18.3.1 in applications.
+Scalafui uses React 19 and creates one React root per Runtime. Keep `react` and
+`react-dom` aligned at version 19.3.1 in applications.
 
 #### Application lifetime
 
@@ -591,7 +585,7 @@ request to go back.
 
 ```scala
 import marubinotto.fui.*
-import slinky.web.html.*
+import marubinotto.react.html.*
 
 val catalog = Map("one" -> "Functional UI", "two" -> "Learning Scala")
 
@@ -613,7 +607,7 @@ object Search extends Feature[String, Unit, String, Search.Msg, Search.Out] {
 
   def view(query: String, context: Unit, dispatch: Msg => Unit) = div(
     input(value := query,
-      onChange := (e => dispatch(Msg.QueryChanged(e.target.value)))),
+      onChange := (e => dispatch(Msg.QueryChanged(e.currentTarget.value)))),
     catalog.toSeq.sortBy(_._1)
       .filter { case (_, title) => title.toLowerCase.contains(query.toLowerCase) }
       .map { case (id, title) =>
@@ -1060,3 +1054,64 @@ Run `yarn install` at the repository root, then `sbt test`. Runtime tests use
 jsdom 30 and require the Node.js versions listed above; browser command tests
 stub storage and fetch. Tests run serially because they install temporary
 browser globals.
+
+
+## React facade (Scala 3)
+
+`marubinotto.react` provides the React 19 client API used by Scalafui and its
+examples. `ReactNode` describes renderable content; `ReactElement` describes an
+actual element. HTML builders are immutable and reusable:
+
+```scala
+import marubinotto.react.*
+import marubinotto.react.html.*
+
+val component = FunctionalComponent[String] { label =>
+  val (count, setCount) = Hooks.useState(0)
+  button(onClick := (_ => setCount.update(_ + 1)))(s"$label: $count")
+}
+```
+
+Use `setCount(value)` to set a value and `setCount.update(previous => next)` to
+update from previous state. Function-valued state is stored without invoking it.
+`useEffect` and `useLayoutEffect` accept a callback returning either `Unit` or a
+cleanup function. Omitting dependencies runs after each commit; `Seq.empty`
+runs on mount; a dependency sequence uses React's `Object.is` comparison.
+Hooks must follow React's rules: call them unconditionally at the top level of
+a component or custom Hook.
+
+For DOM refs, use `Hooks.useDomRef[dom.HTMLDivElement]()` and inspect `.value`,
+which is `None` before mounting and after unmounting. `Hooks.useRef(initial)` is
+for mutable values. `ref.cleanup[T](node => cleanup)` supports React 19 ref
+cleanup. Event `currentTarget` has the registered element's type; `target` is
+an `EventTarget` and may be a descendant.
+
+### External JavaScript components
+
+Use a case class with `derives PropsEncoder` for external props. Nested products
+must also have a `PropsEncoder`. Scala components do not encode their props.
+`None` and `js.undefined` omit a property; `Nullable.Null` explicitly sends null.
+Primitives, sequences, JS values, React nodes, refs, and Scala callbacks with up
+to two arguments are supported. Unsupported fields or callback arguments fail
+at compile time with the field name. Provide a manual `PropsEncoder` for a
+special external representation. JS facade declarations remain responsible
+for describing the external library accurately.
+
+```scala
+case class Options(label: String, enabled: Boolean) derives PropsEncoder
+case class Props(options: Options, title: Option[String] = None)
+    derives PropsEncoder
+```
+
+`React.component` adapts a renderer accepting native JS props into a JS React
+function component. `ReactNode.fromJs` / `ReactNode.toJs` are explicit boundaries
+for trusted React values returned by JavaScript libraries. They do not validate
+arbitrary JavaScript objects as renderable nodes.
+
+### Development and compatibility
+
+React and React DOM are pinned together at 19.3.1. Vite reloads the page after
+Scala.js output changes; Model and Hook state are reset. Fast Refresh is not
+implemented. SSR, Server Components, Actions, and unused React APIs are outside
+this facade's current scope. Run `sbt test` for facade and runtime regression
+coverage; browser-global tests run serially.

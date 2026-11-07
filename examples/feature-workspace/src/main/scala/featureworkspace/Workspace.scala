@@ -1,7 +1,7 @@
 package featureworkspace
 
 import marubinotto.fui.*
-import slinky.web.html.*
+import marubinotto.react.html.*
 
 object Workspace {
   object Slots extends FeatureSlots[Unit] {

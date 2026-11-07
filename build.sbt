@@ -4,7 +4,6 @@ val scala3Version = "3.7.4"
 ThisBuild / scalaVersion := scala3Version
 
 val circeVersion = "0.14.17"
-val slinkyVersion = "0.7.5"
 
 lazy val commonSettings = Seq(
   scalaModuleInfo := scalaModuleInfo.value.map(_.withOverrideScalaVersion(true)),
@@ -14,6 +13,7 @@ lazy val commonSettings = Seq(
     "utf-8",
     "-deprecation",
     "-feature",
+    "-language:implicitConversions",
     "-Wunused:all"
   ),
 
@@ -37,8 +37,6 @@ lazy val commonSettings = Seq(
   libraryDependencies ++= Seq(
     "org.scala-js" %%% "scalajs-dom" % "2.8.1",
     "org.scala-js" %%% "scala-js-macrotask-executor" % "1.1.1",
-    "me.shadaj" %%% "slinky-web" % slinkyVersion,
-    "me.shadaj" %%% "slinky-hot" % slinkyVersion,
     "io.circe" %%% "circe-core" % circeVersion,
     "io.circe" %%% "circe-generic" % circeVersion,
     "io.circe" %%% "circe-parser" % circeVersion,

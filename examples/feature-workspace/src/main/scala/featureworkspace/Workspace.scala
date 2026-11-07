@@ -34,11 +34,9 @@ object Workspace {
   // Register the composed feature, so nested events go through this binding.
   val feature: Feature[Unit, Unit, Model, Msg, Nothing] =
     new Feature[Unit, Unit, Model, Msg, Nothing] {
-      def init(input: Unit, context: Unit): Transition[Model, Msg, Nothing] = {
-        val counter = binding.init(Model(), Slots.counter, ())
-        val editor = binding.init(counter.model, Slots.editor, "")
-        Transition(editor.model, counter.cmd ++ editor.cmd)
-      }
+      def init(input: Unit, context: Unit): Transition[Model, Msg, Nothing] =
+        binding.init(Model(), Slots.counter, ())
+          .andThen(model => binding.init(model, Slots.editor, ""))
 
       def update(msg: Msg, model: Model, context: Unit): Transition[Model, Msg, Nothing] =
         msg match {

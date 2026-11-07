@@ -572,6 +572,12 @@ FeatureSlots groups. Neither the set nor its policy determines DOM placement or 
 `Feature[Input, Context, Model, Msg, Out]` receives feature-specific initialization input.
 Its `init` and `update` return `Transition(model, cmd, outputs)`; commands and
 outputs default to empty. `Transition.unchanged(model)` is a convenient no-op.
+Use `transition.andThen(model => nextTransition)` to compose transitions of the
+same Model type. The callback runs immediately with the preceding Model; the
+result retains both commands and both lists of outputs, in order. Message and
+output types may widen to accommodate the next transition. Commands are combined
+with `++`: this does not execute them or wait for one command to finish before
+another starts.
 Features do not declare subscriptions; the App declares them through Program or
 FeatureProgram.
 
@@ -766,8 +772,15 @@ are ignored if the destination instance is no longer present.
 `FeatureBinding.init`, `remove(model, child)`, and `clear(model)` return parent transitions.
 These replace the former `open` and `close` names; `clear` is unchanged.
 `remove` removes only the specified child; `clear` removes all children in the set. When initializing several
-children in one transition, pass each resulting Model to the next operation and
-combine their commands with `++`; do not discard earlier commands. Low-level
+children in one transition, use `andThen` to pass each resulting Model to the next
+operation while preserving commands and outputs:
+
+```scala
+binding.init(model, Slots.first, firstInput)
+  .andThen(next => binding.init(next, Slots.second, secondInput))
+```
+
+Low-level
 `FeatureSlots.init(state, child, input, policy)` returns a set transition, including its initial outputs;
 prefer `FeatureBinding.init` to perform the parent integration automatically.
 

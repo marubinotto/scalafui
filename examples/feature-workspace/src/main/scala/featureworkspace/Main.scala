@@ -41,11 +41,9 @@ object Main {
     onOutput = (_, model) => Transition.unchanged(model)
   )
 
-  def init(@scala.annotation.unused url: URL): Transition[Model, Msg, Nothing] = {
-    val left = binding.init(Model(), Slots.left, ())
-    val right = binding.init(left.model, Slots.right, ())
-    Transition(right.model, left.cmd ++ right.cmd)
-  }
+  def init(@scala.annotation.unused url: URL): Transition[Model, Msg, Nothing] =
+    binding.init(Model(), Slots.left, ())
+      .andThen(model => binding.init(model, Slots.right, ()))
 
   def update(msg: Msg, model: Model): Transition[Model, Msg, Nothing] = msg match {
     case Msg.Open(side) if slotFor(side).model(model.workspaces).isEmpty =>

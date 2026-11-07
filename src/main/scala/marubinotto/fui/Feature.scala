@@ -8,7 +8,18 @@ case class Transition[Model, +Msg, +Out](
     model: Model,
     cmd: Cmd[Msg] = Cmd.none,
     outputs: List[Out] = Nil
-)
+) {
+  /** Apply the next transition to this model, retaining both commands and
+    * outputs in order. This composes pure transitions immediately; commands
+    * are combined with ++, not executed or awaited.
+    */
+  def andThen[NextMsg >: Msg, NextOut >: Out](
+      next: Model => Transition[Model, NextMsg, NextOut]
+  ): Transition[Model, NextMsg, NextOut] = {
+    val result = next(model)
+    Transition(result.model, cmd ++ result.cmd, outputs ++ result.outputs)
+  }
+}
 
 object Transition {
   def unchanged[Model](model: Model): Transition[Model, Nothing, Nothing] =

@@ -7,35 +7,25 @@ Scalafui is an experimental implementation of the Elm Architecture in Scala.js.
 
 ## Minimal Application Code
 
-The following code is an example of a minimal application implementation using Scalafui.
-
 ```scala
 import org.scalajs.dom
 import org.scalajs.dom.URL
 
-import com.softwaremill.quicklens._
+import com.softwaremill.quicklens.*
 
 import marubinotto.react.ReactNode
-import marubinotto.react.html._
+import marubinotto.react.html.*
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 
-import marubinotto.fui._
+import marubinotto.fui.*
 
 object Main {
-
-  //
-  // MODEL
-  //
 
   case class Model(messages: Seq[String] = Seq.empty, input: String = "")
 
   def init(url: URL): (Model, Cmd[Msg]) = (Model(), Cmd.none)
-
-  //
-  // UPDATE
-  //
 
   sealed trait Msg
   case class Input(input: String) extends Msg
@@ -57,10 +47,6 @@ object Main {
           Cmd.none
         )
     }
-
-  //
-  // VIEW
-  //
 
   def view(model: Model, dispatch: Msg => Unit): ReactNode =
     div(
@@ -96,104 +82,26 @@ object Main {
 }
 ```
 
+## Running examples
 
-## Running Examples
+Requirements: [sbt](https://www.scala-sbt.org/), [Node.js](https://nodejs.org/)
+22.22.2+ (22.x), 24.15.0+ (24.x), or 26+, and [Yarn Classic](https://yarnpkg.com/) 1.22.x.
 
-* Requirements
-    * [sbt](https://www.scala-sbt.org/)
-    * [Node.js](https://nodejs.org/en/download/releases) 22.22.2+ (22.x), 24.15.0+ (24.x), or 26+ for the repository root and tests
-    * [Yarn](https://yarnpkg.com/) Classic 1.22.x
+Run `yarn` and `yarn dev` in the example directory. In a second terminal, start
+`sbt` at the repository root and run the corresponding watch command:
 
-### Hello World
+| Example | Directory | sbt command | Demonstrates |
+| --- | --- | --- | --- |
+| [Hello World](src/main/scala/Main.scala) | `.` | `~fastLinkJS` | Model/View/Update |
+| [ToDo](examples/todo/src/main/scala/todo/Main.scala) | `examples/todo` | `~exampleTodo/fastLinkJS` | TodoMVC |
+| [Multipage](examples/multipage/src/main/scala/multipage/Main.scala) | `examples/multipage` | `~exampleMultipage/fastLinkJS` | Routing, HTTP, debounced search |
+| [Feature Workspace](examples/feature-workspace/README.md) | `examples/feature-workspace` | `~exampleFeatureWorkspace/fastLinkJS` | Independent slots, nesting, outputs, async results |
+| [Stopwatch](examples/stopwatch/src/main/scala/stopwatch/Main.scala) | `examples/stopwatch` | `~exampleStopwatch/fastLinkJS` | Subscriptions |
+| [fuidungeon](examples/fuidungeon/README.md) | `examples/fuidungeon` | `~exampleFuidungeon/fastLinkJS` | Dungeon RPG with immutable state and random initialization |
 
-* [src/main/scala/Main.scala](src/main/scala/Main.scala)
+<img alt="fuidungeon screenshot" src="examples/fuidungeon/screenshot.png" width="50%">
 
-In development mode, use two terminals in parallel:
-
-```console
-$ yarn
-$ yarn run dev
-```
-
-```console
-sbt> ~fastLinkJS
-```
-
-### ToDo
-
-* Scalafui's version of [TodoMVC](https://todomvc.com/)
-* [examples/todo/src/main/scala/todo/Main.scala](examples/todo/src/main/scala/todo/Main.scala)
-
-```console
-$ cd examples/todo
-$ yarn
-$ yarn run dev
-```
-
-```console
-sbt> ~exampleTodo/fastLinkJS
-```
-
-### Multipage
-
-* Multi-page application with [Ajax calls](examples/multipage/src/main/scala/multipage/Server.scala)
-* Debounce Search Cmd 
-* [examples/multipage/src/main/scala/multipage/Main.scala](examples/multipage/src/main/scala/multipage/Main.scala)
-
-```console
-$ cd examples/multipage
-$ yarn
-$ yarn run dev
-```
-
-```console
-sbt> ~exampleMultipage/fastLinkJS
-```
-
-### Feature Workspace
-
-* The same Feature in two independent slots, with nested children, exclusive note
-  views, child outputs, and delayed results that respect instance lifetimes.
-* [Setup, code guide, and things to try](examples/feature-workspace/README.md)
-
-```console
-$ cd examples/feature-workspace
-$ yarn
-$ yarn run dev
-```
-
-```console
-sbt> ~exampleFeatureWorkspace/fastLinkJS
-```
-
-### Stopwatch
-
-* An example of subscription which allows us to listen to external events
-* [examples/stopwatch/src/main/scala/stopwatch/Main.scala](examples/stopwatch/src/main/scala/stopwatch/Main.scala)
-
-```console
-$ cd examples/stopwatch
-$ yarn
-$ yarn run dev
-```
-
-```console
-sbt> ~exampleStopwatch/fastLinkJS
-```
-
-### fuidungeon
-
-A small turn-based dungeon RPG with randomly generated rooms and corridors and
-an automatically following camera. Carry your health between floors and see how
-deep you can descend. Demonstrates pure game rules, immutable
-state, and random initialization through `Cmd`.
-
-See the [fuidungeon README](examples/fuidungeon/README.md) for setup, controls,
-game rules, and development instructions.
-
-<img alt="screenshot" src="examples/fuidungeon/screenshot.png" width="50%">
-
-## Scalafui's basic concepts
+## Core concepts
 
 Scalafui separates an application's definition from its execution. `Program`
 defines how state changes and how it is displayed. `Runtime` holds the current
@@ -225,12 +133,9 @@ flowchart TD
   environment -- "external events" --> subs
 ```
 
-Follow the loop from a UI event: a message enters the queue, `update` produces a
-new Model, and `view` describes the resulting UI. Commands and subscriptions feed
-messages back into the same loop. The nodes inside Runtime execute the functions
-and effect descriptions supplied by Program; Program itself does not run them.
-Browser effects are one source of command work; commands can use other `IO`
-computations too.
+UI events, command results, and subscriptions send messages to Runtime.
+For each message, `update` returns a new Model and commands; `view` describes the UI.
+Commands can use browser helpers or any other `IO` computation.
 
 ### Program
 
@@ -310,33 +215,23 @@ val commands = Cmd.Batch(
 )
 ```
 
-These constructors are lazy: creating a command does not execute its IO. They
-preserve IO errors and cancellation. `.toCmd` on `IO[Option[A]]` emits the Option
-itself, including `None`; on `IO[Unit]` it emits Unit. Use `Cmd.optional` or
-`Cmd.exec` when those results should not produce messages. To turn an IO failure
-into an application message, handle it in the IO before converting to a command,
-for example with `attempt.map(ResultReceived.apply).toCmd`.
+Commands are lazy and preserve IO errors and cancellation. `.toCmd` emits the
+computed value, including `None` or `Unit`; use `Cmd.optional` or `Cmd.exec` to
+suppress those messages. Handle expected failures before conversion, for example
+with `attempt.map(ResultReceived.apply).toCmd`.
 
-`Cmd.fromFuture(futureExpression)` takes its argument by name and evaluates it
-on each command execution, emitting `Right(value)` on success or `Left(error)`
-for a failed Future or a synchronous exception while creating it. Constructing
-the command does not evaluate the expression. Passing an already-created Future
-cannot defer its start; repeated executions then reuse that same Future.
-Canceling the command does not cancel the underlying Future.
+`Cmd.fromFuture(expression)` evaluates its by-name argument on each execution
+and emits `Either[Throwable, A]`. An already-created Future starts independently
+and is reused. Canceling the command does not cancel the Future.
 
-Use IO `flatMap` for dependent steps and Cats `sequence` / `parSequence` for
-sequential / parallel computations whose results should be collected into one
-message. `Cmd.Batch` runs commands independently, emitting results as they finish;
-completion order is not guaranteed. Commands can also be combined with `++`, and
-batches support append/prepend operations. `map` transforms emitted messages;
-`toNone` on a single command suppresses its message.
+Compose dependent work with IO `flatMap`; use `sequence` / `parSequence` to collect
+results. `Cmd.Batch` and `++` run commands independently, with no completion-order
+guarantee. `map` transforms messages; `toNone` suppresses a single command's result.
 
-Debounce applies to a single command and takes a `FiniteDuration`, such as
-`500.millis`. A new command replaces pending work with the same key, but does not
-cancel work that has already started. Zero or negative delays do not wait.
-Compose the IO first, then attach debounce; extracting `.io` from a command loses
-its debounce policy. `map` and `toNone` preserve the policy. Runtime cancels
-pending debounce waits when it is released.
+Attach `.debounce(key, duration)` after composing the IO. A new command replaces
+pending work with the same key, but does not cancel work already started. Keys
+are shared across the Runtime. `map` and `toNone` preserve debounce; extracting
+`.io` loses it. Zero or negative delays do not wait.
 
 #### Subscriptions
 
@@ -362,35 +257,7 @@ def subscriptions(model: Model): Sub[Tick] =
 DOM events. Combine sources with `combine`, or use `Sub.Impl(id, stream)` for an
 `fs2.Stream[IO, Msg]`.
 
-For callback APIs, `Sub.fromResource` takes a registration function returning a
-`Resource[IO, Unit]`. Registration starts when the subscription stream runs;
-events emitted during registration are retained. The resource is released when
-the stream ends, fails, or is canceled, before its callback Dispatcher is released.
-Compose resources to safely register multiple sources:
-
-```scala
-import cats.effect.{IO, Resource}
-import marubinotto.fui.*
-
-def externalSources[Msg](
-    registerFirst: (Msg => Unit) => (() => Unit),
-    registerSecond: (Msg => Unit) => (() => Unit)
-): Sub[Msg] =
-  Sub.fromResource[Msg]("external-sources") { emit =>
-    for {
-      _ <- Resource.make(IO(registerFirst(emit)))(unregister => IO(unregister()))
-      _ <- Resource.make(IO(registerSecond(emit)))(unregister => IO(unregister()))
-    } yield ()
-  }
-```
-
-If the second registration fails, the first is released. On normal teardown,
-resources are released in reverse acquisition order, even if a finalizer fails.
-Each acquisition must still clean up any partial work it performs before failing.
-
-A single callback API returning an unregister function can be adapted with
-`Resource.make`. Its acquisition is uncancelable: cancellation during registration
-waits for acquisition to finish and then runs cleanup.
+For callback APIs, use `Sub.fromResource` with a registration resource:
 
 ```scala
 import cats.effect.{IO, Resource}
@@ -402,50 +269,26 @@ def externalEvents[Msg](register: (Msg => Unit) => (() => Unit)): Sub[Msg] =
   }
 ```
 
-Runtime compares subscription IDs after each update. New IDs start streams;
-removed IDs cancel streams and run their cleanup. Keeping an ID keeps its
-existing stream, even if `subscriptions` constructs a different stream for that
-ID. To restart a completed or stopped subscription, remove its ID in one update
-before adding it again.
+Registration starts with the stream, retains events emitted during registration,
+and releases resources when the stream ends, fails, or is canceled. Compose
+multiple registrations with `Resource` to ensure cleanup on partial failure.
 
-### Runtime
+Runtime compares subscription IDs after each update: new IDs start streams and
+removed IDs cancel them. Keeping an ID keeps its existing stream, even if the
+new declaration supplies a different stream. To restart a completed or failed
+source, remove its ID in one update before adding it again.
 
-Runtime connects the pieces of Program: it owns the current Model, processes
-messages, renders the view, starts commands, and maintains subscriptions.
-`dispatch` queues a message rather than updating the Model synchronously.
-Messages are processed one at a time, while commands execute independently;
-queueing messages does not impose command completion order.
+### Runtime and application lifetime
 
-At startup, Runtime calls `init`, sets up the initial view and subscriptions,
-and then starts the initial command. For each subsequent message, it calls
-`update`, renders the returned Model, schedules the returned commands, and
-reconciles subscriptions with that Model.
+Runtime owns the Model, renders views, executes commands, and reconciles
+subscriptions. `dispatch` queues messages for serial processing; commands run
+independently. Startup initializes the Model, view, and subscriptions before
+starting the initial command.
 
-Scalafui uses React 19 and creates one React root per Runtime. Keep `react` and
-`react-dom` aligned at version 19.3.1 in applications.
-
-#### Application lifetime
-
-Running an application acquires resources, including a React root, background
-work, and event listeners. `Runtime.make(container, program)` returns
-`Resource[IO, Runtime[Model, Msg]]`. The usual browser entry point,
-`Browser.run`, returns `IO[Unit]` and monitors fatal update-loop failures.
-`Browser.mount` returns `Resource[IO, Runtime[Model, Msg]]` for explicit lifetime
-management. It starts the application on acquisition and unmounts it on release.
-
-Keep the application's resource scope open for as long as the UI should run.
-For an application-defined `program` and DOM `container`, the startup pattern is:
-
-```scala
-import cats.effect.IO
-import marubinotto.fui.*
-
-val run: IO[Unit] =
-  Browser.run(container, program)
-```
-
-For a custom lifetime, `mount` exposes the Runtime. Given an
-`applicationLifetime: IO[Unit]`, the caller can race it against fatal failure:
+Use `Browser.run(container, program): IO[Unit]` for an application entry point.
+For explicit lifetime management, `Browser.mount` returns
+`Resource[IO, Runtime[Model, Msg]]`; `Runtime.make` provides the lower-level
+resource without browser navigation integration.
 
 ```scala
 Browser.mount(container, program).use { runtime =>
@@ -456,41 +299,21 @@ Browser.mount(container, program).use { runtime =>
 }
 ```
 
-The returned Runtime also exposes `dispatch(msg)` for sending messages.
-`awaitFailure` only observes the cause; this example propagates it without
-calling the error reporter. Use `Browser.run` for built-in fatal-error reporting.
+Keep the resource scope open while the UI should run. Release stops message
+processing, cancels commands and subscriptions, waits for finalizers, removes
+listeners, and unmounts React. Dispatch after release is ignored.
 
-Leaving the resource scope stops message processing, cancels commands and
-subscriptions while waiting for their finalizers, clears debounce timers,
-removes URL listeners, and unmounts React. Partial startup failures also release
-acquired resources. Dispatch after release is ignored. Cancellation of `ajaxGetJson`, `ajaxGet`, and `ajaxHead` aborts the underlying
-fetch request, including pending response body reads for GET. Cancellation of
-`encodeAsBase64` aborts its FileReader and removes its event handlers. These
-operations remain canceled rather than emitting a `Left` result. Each execution
-owns its cancellation resources; canceling one does not affect another.
-Image loading and geolocation do not currently abort their underlying operations.
+All three entry points accept `onError: RuntimeError => IO[Unit]`, defaulting to
+console logging. Command and subscription failures are reported while other work
+continues; failed subscriptions do not automatically restart. Normal cancellation
+is not reported. Reporters must terminate without canceling themselves; reporter
+failures fall back to console logging.
 
-#### Runtime errors
-
-`Runtime.make`, `Browser.mount`, and `Browser.run` accept an optional
-`onError: RuntimeError => IO[Unit]`, defaulting to console logging. Unhandled
-command failures report `RuntimeError.Command`; failed subscriptions report
-`RuntimeError.Subscription(id, cause)`. Other work continues. Failed subscriptions
-keep their ID and do not automatically restart. Normal cancellation is not reported.
-Use `.attempt` to turn expected application failures into messages as before.
-
-An exception in the update loop stops message acceptance immediately.
-`Runtime.awaitFailure` observes the first cause without reporting or releasing
-resources. `Browser.run` waits for this failure, reports `RuntimeError.UpdateLoop`,
-and raises the original exception, releasing the application resources.
-Low-level resource users own their lifetime and fatal-error monitoring;
-`Browser.mount` does not automatically interrupt its caller's `use` body.
-Startup exceptions still fail resource acquisition directly.
-
-Reporters must terminate and must not cancel themselves. Synchronous exceptions
-and failed reporter IOs fall back to console logging without recursive notification.
-Fatal failure recording and input shutdown precede reporting. React-internal
-asynchronous rendering errors require a separate Error Boundary.
+An update-loop failure stops message acceptance. `Browser.run` reports it and
+raises the original exception, releasing resources. With `Browser.mount` or
+`Runtime.make`, monitor `runtime.awaitFailure` and manage the scope yourself, as
+above; `awaitFailure` only observes the cause. Startup errors fail acquisition.
+React-internal asynchronous rendering errors require a React Error Boundary.
 
 ### Browser
 
@@ -530,6 +353,11 @@ HTTP, FileReader encoding, and geolocation report their asynchronous errors as
 even for a non-success HTTP status; inspect its status yourself. Image loading
 and Base64 decoding begin only when the IO runs, and failures fail the IO.
 `Browser.send(msg)` is also available to construct a command that emits a message.
+
+Cancellation of HTTP helpers aborts fetch, including pending GET body reads;
+cancellation of `encodeAsBase64` aborts its FileReader. These operations remain
+canceled rather than emitting `Left`. Image loading and geolocation do not abort
+their underlying operations.
 
 ## Features: composition beyond Elm Architecture
 
@@ -635,52 +463,20 @@ object Work extends Feature[String, Unit, String, Work.Msg, Work.Out] {
 
 ### Providing current context
 
-`Input` initializes a visit, `Model` holds the feature's own state, and `Context`
-provides read-only external data for each `init`, `update`, or `view` call. Context
-is not stored in child state. Changing context does not reinitialize the child or
-invoke `update`; the next call receives the value supplied by its owner.
+`Input` initializes an instance; `Model` holds its state; `Context` supplies
+read-only external data on each `init`, `update`, and `view` call. Context is not
+stored in child state, and changes alone do not invoke `update` or reinitialize it.
 
-A group declares its shared context type with `FeatureSlots[Context]`. A binding
-projects that context from the parent's **current** model and context:
+Declare a group's context with `FeatureSlots[Context]` and project it in `bind`
+using `context = (model, parentContext) => ...`. Output handlers receive the
+current parent context and accumulated Model. Events capture their destination,
+but use the context current when handled. Commands retain values captured when
+created. Adapt a narrower feature with
+`slot(editor.mapContextFrom[AppContext](_.editor))`.
 
-```scala
-// Detail is a Feature[String, DetailContext, Detail.Model, Detail.Msg, Detail.Out].
-case class DetailContext(locale: String, canEdit: Boolean)
-object Details extends FeatureSlots[DetailContext] {
-  val detail = slot(Detail)
-}
-// ParentModel contains details: Details.State and canEdit: Boolean.
-// ParentContext contains locale: String; ParentMsg.Child wraps Details.Event.
-val details = Details.bind[ParentContext, ParentModel, ParentMsg, Nothing](
-  policy = Details.policy(),
-  state = _.details,
-  replace = (model, state) => model.copy(details = state),
-  wrap = ParentMsg.Child.apply,
-  extract = { case ParentMsg.Child(event) => Some(event); case _ => None },
-  context = (model, context) => DetailContext(context.locale, model.canEdit),
-  onOutput = (output, model, context) => handleOutput(output, model, context)
-)
-// In the parent, pass the context received by init/update/view:
-// details.init(model, Details.detail, id, context)
-// details.view(model, Details.detail, dispatch, div(), context)
-// Attach details with parentFeature.withFeatures(details).
-```
-
-Output handlers receive the parent context and the accumulated parent model,
-including the installed child transition. Stale child events are rejected before
-context projection. An event callback captures its destination and message, not
-context: even a callback from an earlier render is handled using the context of
-the current update. A command still captures any values used when it was created;
-its reply is processed with the context supplied when that reply is handled.
-
-A child need not depend on a global context type. Adapt a narrower feature when
-registering it, for example `slot(editor.mapContextFrom[AppContext](_.editor))`.
-The projection applies to initialization, updates, and rendering. Directly using
-the application's context type is also supported.
-
-Use `Unit` for features without external context. Their `init(input)`,
-`update(msg, model)`, and `view(model, dispatch)` convenience calls remain available.
-To omit context parameters in the definition too, use the function-based constructor:
+Use `Unit` when no context is needed. `FeatureProgram` uses `Unit` as its root
+context; root bindings can derive child context from the current application
+Model. `Feature.withoutContext` also omits context parameters from definitions:
 
 ```scala
 val counter = Feature.withoutContext[Int, Int, Int, Nothing](
@@ -690,14 +486,6 @@ val counter = Feature.withoutContext[Int, Int, Int, Nothing](
     button(onClick := (_ => dispatch(1)))(count.toString)
 )
 ```
-
-This returns an ordinary `Feature[Int, Unit, Int, Int, Nothing]`, supporting
-`slot(counter)`, `withFeatures`, and `mapContextFrom` as usual. Trait-based
-definitions remain available.
-
-Groups and bindings with `Unit` context also offer context-free calls.
-`FeatureProgram` uses `Unit` as its root context; a root binding can derive a child
-context from the current application model using `(model, _: Unit) => ...`.
 
 ### Connecting a child to its parent
 
@@ -784,7 +572,6 @@ but commands already generated by that transition still execute. Their results
 are ignored if the destination instance is no longer present.
 
 `FeatureBinding.init`, `remove(model, child)`, and `clear(model)` return parent transitions.
-These replace the former `open` and `close` names; `clear` is unchanged.
 `remove` removes only the specified child; `clear` removes all children in the set. When initializing several
 children in one transition, use `andThen` to pass each resulting Model to the next
 operation while preserving commands and outputs:
@@ -794,9 +581,9 @@ binding.init(model, Slots.first, firstInput)
   .andThen(next => binding.init(next, Slots.second, secondInput))
 ```
 
-Low-level
-`FeatureSlots.init(state, child, input, policy)` returns a set transition, including its initial outputs;
-prefer `FeatureBinding.init` to perform the parent integration automatically.
+Prefer `FeatureBinding.init` for parent integration. The lower-level
+`FeatureSlots.init(state, child, input, policy)` returns a set transition with
+initial outputs.
 
 ### Multiple independent exclusive groups
 
@@ -825,10 +612,10 @@ are rejected when constructing the group/policy. Policies do not change during a
 binding's lifetime. Each `view` call names the child to render; render multiple
 children to display them together, and choose layout and order in the parent.
 
-### Sending messages to a child visit
+### Sending messages to a child instance
 
-A binding can capture a child's current address as a parent message, or create
-a command that emits it:
+Capture a child's current address for a deferred callback with `message`, or
+return a command with `send`:
 
 ```scala
 val back: Option[Msg] =
@@ -837,18 +624,9 @@ val backCommand: Cmd[Msg] =
   pageBinding.send(model, Pages.work, Work.Msg.Back)
 ```
 
-Use `message` for deferred callbacks such as confirmation dialogs, and `send`
-when an update should return a command. Both capture the child's generation
-**when called**, without updating the child or evaluating its context. They need
-no Context argument, including on bindings with non-Unit context. The message
-is processed through the usual parent update and binding output handler, using
-the context supplied at that time.
-
-An inactive child yields `None` or `Cmd.none`. Opening it later does not activate
-an already-created command. Removal, clearing, reinitialization, or exclusive replacement
-makes captured messages stale; routing ignores them rather than delivering them
-to a new visit. Ordinary updates and changes to concurrent siblings preserve the
-destination. The lower-level `child.event(state, msg)` API remains available.
+Both capture the instance generation when called, without updating the child or
+evaluating context. An inactive child yields `None` or `Cmd.none`. Messages use
+the normal binding/output handling and the context current when processed.
 
 ### App-level subscriptions
 
@@ -881,96 +659,32 @@ update before adding it again. Reconstructing a stream under the same ID does no
 change its destination. Subscription IDs and debounce keys remain shared within
 a Runtime; the App must choose non-conflicting names for independent operations.
 
-### Instance replacement and asynchronous results
+### Instance lifetime and asynchronous results
 
-Initializing a child always creates a new instance, including when reinitializing the same
-child with the same input. State retains a generation for each child independently.
-An exclusive initialization removes its peers before installing the new child. Other groups
-and concurrent children's states and event addresses remain valid.
-Use `remove` or `clear` on existing state to retain generation history; `empty` is
-only for initial state, never for resetting an existing set.
+Initializing a slot creates a new instance, even with the same input. Exclusive
+initialization removes peers; independent slots retain their state and identity.
+Use `remove` or `clear` to preserve generation history. `empty` is only for initial
+state, not for resetting an existing set.
 
-Rendering through `FeatureSlots.view` or a binding's `view` also gives each child
-visit its own React identity, without adding a DOM wrapper. Ordinary updates
-preserve component-local state at the same position in the tree; reinitializing a
-child or replacing it with another child remounts its view and runs the old
-view's effect cleanup. Feature implementations do not need to supply a visit key
-(their own lists still need normal React keys). Calling `feature.view` directly
-does not install this boundary.
+Events target an instance generation. Removing or reinitializing a child makes
+its earlier messages stale; routing ignores them without calling the child or
+parent update. Nested sets check each level, so replacing an ancestor also
+invalidates descendant messages.
 
-An active child is not necessarily rendered. Removing its view from the React
-tree still discards component-local state, even if the child remains initialized.
-Values that must survive hiding and redisplaying a child belong in its Model.
+**Removing a child does not cancel its commands or debounce waits.** They can
+still perform external writes; only stale result messages are ignored. This also
+applies when an initial output removes the child. Application shutdown cancels
+work through Runtime's resource lifecycle.
 
-```mermaid
-flowchart LR
-  old["Old child starts Cmd"] --> work["IO continues running"]
-  old --> replace["Close or replace child"]
-  replace --> current["Inactive child or new generation"]
-  work -- "result Msg" --> check["FeatureSlots checks child and generation"]
-  current --> check
-  check -- "old address" --> discard["Ignore: no state change, Cmd or Out"]
-  check -- "current address" --> update["Child update"]
-```
+Rendering through a slot or binding gives each instance its own React identity.
+Reinitialization remounts the view and runs effect cleanup. Hiding a view discards
+Hook state but preserves the child Model and event address; keep values that must
+survive hiding in the Model. Calling `feature.view` directly omits this boundary.
 
-Commands are ordinary Cmd values, mapped into parent messages with `map` and
-combined with `++`. Runtime does not know about Features. Each set validates its
-message destination immediately before calling the child's update. Nested sets
-validate at each level, so replacing an ancestor also makes its previous
-messages ineffective. Stale child messages do not fall through to the parent's
-update. They can still pass through the normal Runtime rendering loop.
-
-Clearing or replacing a child does **not** cancel running commands or pending
-debounce waits. They can complete and perform external writes; only their stale
-result messages are ignored. Even if an initial output immediately removes the
-child, its generated commands still execute. Application shutdown retains the
-existing Runtime behavior of canceling commands and subscriptions and awaiting
-cleanup. These are App lifetime guarantees, not child lifetime guarantees.
-
-Debounce semantics are unchanged: a new command with the same key replaces a
-pending wait across the entire Runtime, but does not cancel already started work.
-Hiding a view does not remove the child state, invalidate its address, or change
-subscriptions unless the App's subscription function explicitly does so.
-
-Instance identity only protects against messages from previous instances. Two
-requests within the **same** search instance still need an application-level
-request serial or another explicit ordering policy. The multipage Search keeps
-its `requestSerial` for this reason.
-
-For HTTP requests and URL routing, see the
-[Multipage example](examples/multipage/src/main/scala/multipage/Main.scala):
-`Pages` registers Search and Work, and its policy makes them mutually exclusive.
-Search emits `QueryChanged` and `OpenWork`,
-and Main owns URL changes. The example's former `pageSerial` and manual child
-message routing are handled by the feature connection.
-
-### Migrating from ChildFeatures
-
-This is a naming-only breaking API change; no compatibility aliases are provided.
-
-- Replace `ChildFeatures[Context]` with `FeatureSlots[Context]`.
-- Replace `child(feature)` with `slot(feature)` and `Child[I, M, E, O]` with
-  `Slot[I, M, E, O]`.
-- State, event routing, lifecycle, coexistence policies, and rendering behavior
-  are unchanged. `FeatureBinding.features` and `withFeatures` keep their names.
-
-### Migrating from FeatureSlot
-
-This is a breaking API change; no compatibility wrapper is provided.
-
-- Replace `extends FeatureSlot` with `extends FeatureSlots[Unit]` and `variant(feature)`
-  with `slot(feature)`. Typed references are now `Slot[I, M, E, O]`.
-- Supply `policy` explicitly to `bind`. To preserve the old replacement behavior
-  for two or more children, put them all in one `exclusive` group. For one child,
-  use `policy()`; reinitializing that child still replaces its instance.
-- Combine formerly separate slots into one set if desired. Leave their children
-  ungrouped to preserve independence and use one parent state/event/binding.
-- Pass a child to `binding.view(model, child, dispatch, empty)`. Use
-  `binding.remove(model, child)` for individual removal and `binding.clear(model)`
-  for all children. Low-level `init` now requires an explicit policy too.
-- `FeatureBinding.features` replaces `slot`. Do not reset existing state to `empty`.
-- `Transition`, `FeatureProgram`, and Runtime execution semantics are unchanged.
-  Feature declarations now include a Context type and argument; use `Unit` when unused.
+Instance identity does not order requests within the same instance. Use an
+application-level request serial when needed, as in the
+[Multipage example](examples/multipage/src/main/scala/multipage/Main.scala),
+which also demonstrates HTTP and URL routing.
 
 ## Routing
 
@@ -1055,8 +769,7 @@ jsdom 30 and require the Node.js versions listed above; browser command tests
 stub storage and fetch. Tests run serially because they install temporary
 browser globals.
 
-
-## React facade (Scala 3)
+## React facade
 
 `marubinotto.react` provides the React 19 client API used by Scalafui and its
 examples. `ReactNode` describes renderable content; `ReactElement` describes an
@@ -1108,10 +821,9 @@ function component. `ReactNode.fromJs` / `ReactNode.toJs` are explicit boundarie
 for trusted React values returned by JavaScript libraries. They do not validate
 arbitrary JavaScript objects as renderable nodes.
 
-### Development and compatibility
+### Development
 
 React and React DOM are pinned together at 19.3.1. Vite reloads the page after
 Scala.js output changes; Model and Hook state are reset. Fast Refresh is not
 implemented. SSR, Server Components, Actions, and unused React APIs are outside
-this facade's current scope. Run `sbt test` for facade and runtime regression
-coverage; browser-global tests run serially.
+this facade's current scope.

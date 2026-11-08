@@ -59,6 +59,65 @@ class WorkspaceSpec extends AsyncFunSuite {
     } yield messages.foldLeft(changed)(step)
   }
 
+  test("automatic ticks are independent and stopping rejects a queued tick") {
+    val leftOn = sendCounter(initial, Counter.Msg.ToggleAutoIncrement)._1
+    val bothOn = sendCounter(leftOn, Counter.Msg.ToggleAutoIncrement, right)._1
+    val leftSubs = Sub.toMap(Main.program.subscriptions(leftOn))
+    val bothSubs = Sub.toMap(Main.program.subscriptions(bothOn))
+    assert(leftSubs.size == 1 && bothSubs.size == 2)
+    TestControl.executeEmbed {
+      for {
+        leftTick <- leftSubs.values.head.take(1).compile.lastOrError
+        rightTick <- bothSubs.filterNot { case (id, _) => leftSubs.contains(id) }
+          .values.head.take(1).compile.lastOrError
+      } yield {
+        val counted = step(step(bothOn, leftTick), rightTick)
+        assert(counter(counted).value == 1 && counter(counted, right).value == 1)
+        val stopped = sendCounter(counted, Counter.Msg.ToggleAutoIncrement)._1
+        assert(Sub.toMap(Main.program.subscriptions(stopped)).keySet ==
+          bothSubs.keySet.diff(leftSubs.keySet))
+        assert(counter(step(stopped, leftTick)).value == 1)
+        assert(counter(step(stopped, rightTick), right).value == 2)
+        val preview = sendWorkspace(counted, Workspace.Msg.Preview)
+        assert(Sub.toMap(Main.program.subscriptions(preview)).keySet == bothSubs.keySet)
+      }
+    }.unsafeToFuture()
+  }
+
+  for (operation <- List("counter reset", "workspace reset", "close/reopen")) {
+    test(s"$operation removes automatic subscriptions and reopening uses a new address") {
+      val leftOn = sendCounter(initial, Counter.Msg.ToggleAutoIncrement)._1
+      val bothOn = sendCounter(leftOn, Counter.Msg.ToggleAutoIncrement, right)._1
+      val leftSubs = Sub.toMap(Main.program.subscriptions(leftOn))
+      val rightKeys = Sub.toMap(Main.program.subscriptions(bothOn)).keySet.diff(leftSubs.keySet)
+      val reset = operation match {
+        case "counter reset" => sendWorkspace(bothOn, Workspace.Msg.ResetCounter)
+        case "workspace reset" => step(bothOn, Main.Msg.Reset(left))
+        case _ =>
+          val closed = step(bothOn, Main.Msg.Close(left))
+          assert(Sub.toMap(Main.program.subscriptions(closed)).keySet == rightKeys)
+          step(closed, Main.Msg.Open(left))
+      }
+      assert(!counter(reset).autoIncrement)
+      assert(Sub.toMap(Main.program.subscriptions(reset)).keySet == rightKeys)
+      val restarted = sendCounter(reset, Counter.Msg.ToggleAutoIncrement)._1
+      val newSubs = Sub.toMap(Main.program.subscriptions(restarted))
+      assert(newSubs.size == 2)
+      assert((newSubs.keySet intersect leftSubs.keySet).isEmpty)
+      TestControl.executeEmbed {
+        for {
+          oldTick <- leftSubs.values.head.take(1).compile.lastOrError
+          newTick <- newSubs.filterNot { case (id, _) => rightKeys.contains(id) }
+            .values.head.take(1).compile.lastOrError
+        } yield {
+          assert(counter(step(restarted, oldTick)).value == 0)
+          assert(counter(step(restarted, newTick)).value == 1)
+          assert(counter(restarted, right).autoIncrement)
+        }
+      }.unsafeToFuture()
+    }
+  }
+
   test("the same Workspace feature has independent counters and notes in two slots") {
     val counted = sendCounter(initial, Counter.Msg.Increment)._1
     val edited = edit(counted, "Right-hand note", right)

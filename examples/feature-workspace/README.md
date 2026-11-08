@@ -51,7 +51,14 @@ sbt 'exampleFeatureWorkspace/test'
    note and Edit mode. The old result cannot reach its descendants. The other
    workspace is unaffected.
 
-**Closing or resetting does not cancel running work.** Commands finish, but
+5. Start auto +1 on both counters. Each adds one every second using the same
+   local subscription ID, `tick`. Stop one: the other continues. Switching note
+   views also leaves auto increment running.
+6. Reset a counter or close/reset its workspace while auto increment is on.
+   Its subscription stops; reopening starts with auto increment off. Start it
+   again to create a fresh subscription, without affecting the other workspace.
+
+**Closing or resetting stops subscriptions but does not cancel running commands.** Commands finish, but
 FeatureSlots ignores results addressed to an earlier visit. Counter reset uses
 `binding.init`, not a value-only reset; closing uses `binding.remove`, preserving
 slot generation history. Existing state is never reset to `Slots.empty`.
@@ -62,8 +69,10 @@ slot generation history. Existing state is never reset to `Slots.empty`.
   open/close/reset controls, and the single browser Runtime.
 - `Workspace.scala`: nested slots, an explicit exclusive policy, child output
   handling and composition with `withFeatures` before outer registration.
-- `Counter.scala`: immediate updates and a three-second `Cmd`. Only one delayed
-  increment per active counter is pending at a time.
+- `Counter.scala`: immediate updates, a three-second `Cmd`, and an optional
+  one-second `Sub.every` declared by the Feature. Only one delayed increment per
+  active counter is pending at a time. Feature composition scopes `tick` through
+  both Counter and Workspace instances; Main needs no subscription routing.
 - `NoteEditor.scala` / `NotePreview.scala`: output-driven editing and plain-text
   rendering. Slot registrations do not determine DOM placement; `view` does.
 

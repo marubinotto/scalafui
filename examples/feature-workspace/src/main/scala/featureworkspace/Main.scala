@@ -85,10 +85,10 @@ object Main {
       ),
       section(className := "try-it", aria-"label" := "Things to try")(
         div(h3("01 / Make it yours"), p("Count on the left. Write on the right. Each workspace keeps its own state.")),
-        div(h3("02 / Change the view"), p("Switch Edit to Preview. Your note stays put, and the counter keeps going.")),
+        div(h3("02 / Change the view"), p("Start auto +1 on both sides. Stop one, or switch its note view; the other keeps counting.")),
         div(h3("03 / Start fresh"), p("Click +1 after 3s, then reset or close that workspace. The old result won’t change the new one."))
       ),
-      footer("Closing or resetting does not cancel work already running. Results from the previous instance are ignored.")
+      footer("Closing or resetting stops auto increment. A delayed +1 keeps running, but its old result is ignored.")
     )
   }
 

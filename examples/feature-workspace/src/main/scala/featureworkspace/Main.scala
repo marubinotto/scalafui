@@ -31,7 +31,6 @@ object Main {
     }
 
   val binding = Slots.bind[Model, Msg, Nothing](
-    policy = Slots.policy(),
     state = _.workspaces,
     replace = (model, workspaces) => model.copy(workspaces = workspaces),
     wrap = Msg.WorkspaceEvent.apply,

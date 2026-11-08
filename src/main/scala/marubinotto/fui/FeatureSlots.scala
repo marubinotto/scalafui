@@ -186,6 +186,31 @@ abstract class FeatureSlots[Context] {
       _.view(state.generations(child), dispatch, context)
     )
 
+  /** Bind with the default policy: all children may coexist. */
+  final def bind[C, M, E, O](
+      state: M => State,
+      replace: (M, State) => M,
+      wrap: Event => E,
+      extract: E => Option[Event],
+      context: (M, C) => Context,
+      onOutput: (Output, M, C) => Transition[M, E, O]
+  ): FeatureBinding[C, M, E, O] { val features: FeatureSlots.this.type } =
+    bind[C, M, E, O](
+      policy(), state, replace, wrap, extract, context, onOutput
+    )
+
+  /** Bind without external context, allowing all children to coexist. */
+  final def bind[M, E, O](
+      state: M => State,
+      replace: (M, State) => M,
+      wrap: Event => E,
+      extract: E => Option[Event],
+      onOutput: (Output, M) => Transition[M, E, O]
+  )(using
+      unit: Unit =:= Context
+  ): FeatureBinding[Unit, M, E, O] { val features: FeatureSlots.this.type } =
+    bind[M, E, O](policy(), state, replace, wrap, extract, onOutput)
+
   /** Project fresh child context from the parent's current model and context.
     */
   final def bind[C, M, E, O](

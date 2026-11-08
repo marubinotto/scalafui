@@ -493,13 +493,16 @@ Register slots in a stable FeatureSlots definition. Each set has its own `State`
 `Event`, `Output`, `Slot`, and `Policy` types. Children and policies from another
 set cannot be used in its binding.
 
-`bind` requires a policy and describes how to read and replace child state, wrap
+`bind` allows children to coexist by default; omit `policy` or pass `Slots.policy()`
+explicitly. Supply a policy with exclusive groups when children must replace each
+other. The binding describes how to read and replace child state, wrap
 and extract messages, and handle outputs. Register the resulting connection with
 `withFeatures`. One binding connects all children in its set. You can chain calls
 for separate sets, but the same set can be bound only once in a given parent.
 
 The following connects Search and Work with an explicit exclusive policy. Without
-that group (`Pages.policy()`), initializing Work would retain Search's state too.
+that group (omit `policy` or use `Pages.policy()`), initializing Work would retain
+Search's state too.
 
 The output handler is a method, so it can refer to `pageBinding` without evaluating
 it during binding construction. Returning to Search resets the query in this example:

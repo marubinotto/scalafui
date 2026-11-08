@@ -23,7 +23,7 @@ h1 { font-size: clamp(30px, 4vw, 46px); letter-spacing: -.055em; line-height: 1.
 .workspaces { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .workspace { background: #fffefa; border: 1px solid #dce1d5; border-radius: 16px; overflow: hidden; box-shadow: 0 5px 18px #263d3505; }
 .workspace-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 20px 22px; background: #eaf0e4; border-bottom: 1px solid #dce1d5; }
-.workspace:nth-child(2) .workspace-heading { background: #eeeae0; }
+.workspace:nth-child(even) .workspace-heading { background: #eeeae0; }
 .workspace-title { display: flex; align-items: center; gap: 10px; }
 .workspace-number { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 1px solid #a4b69d; border-radius: 50%; font-size: 11px; }
 h2 { font-size: 16px; letter-spacing: -.03em; margin: 0; }
@@ -67,3 +67,6 @@ footer { margin-top: 20px; color: #818979; font-size: 11px; line-height: 1.8; }
   .workspace-heading { padding: 18px 20px; }
   .try-it { gap: 22px; }
 }
+
+.add-workspace { margin: 0 0 24px; }
+.closed-workspace .text-button { margin-top: 16px; }

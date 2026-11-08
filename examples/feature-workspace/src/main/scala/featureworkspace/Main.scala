@@ -10,25 +10,21 @@ import marubinotto.react.html.*
 
 object Main {
   object Slots extends FeatureSlots[Unit] {
-    val left = slot(Workspace.feature)
-    val right = slot(Workspace.feature)
+    val workspaces = collectionSlot[Int](Workspace.feature)
   }
-  enum Side {
-    case Left, Right
-  }
-  case class Model(workspaces: Slots.State = Slots.empty)
+  case class Model(
+      workspaces: Slots.State = Slots.empty,
+      cards: Vector[Int] = Vector(1, 2),
+      nextId: Int = 3
+  )
   enum Msg {
     case WorkspaceEvent(event: Slots.Event)
-    case Open(side: Side)
-    case Close(side: Side)
-    case Reset(side: Side)
+    case Add
+    case Open(id: Int)
+    case Close(id: Int)
+    case Reset(id: Int)
+    case Remove(id: Int)
   }
-
-  def slotFor(side: Side): Slots.Slot[Unit, Workspace.Model, Workspace.Msg, Nothing] =
-    side match {
-      case Side.Left => Slots.left
-      case Side.Right => Slots.right
-    }
 
   val binding = Slots.bind[Model, Msg, Nothing](
     state = _.workspaces,
@@ -39,54 +35,59 @@ object Main {
   )
 
   def init(@scala.annotation.unused url: URL): Transition[Model, Msg, Nothing] =
-    binding.init(Model(), Slots.left, ())
-      .andThen(model => binding.init(model, Slots.right, ()))
+    binding.init(Model(), Slots.workspaces, 1, ())
+      .andThen(model => binding.init(model, Slots.workspaces, 2, ()))
 
   def update(msg: Msg, model: Model): Transition[Model, Msg, Nothing] = msg match {
-    case Msg.Open(side) if slotFor(side).model(model.workspaces).isEmpty =>
-      binding.init(model, slotFor(side), ())
-    case Msg.Reset(side) if slotFor(side).model(model.workspaces).isDefined =>
-      binding.init(model, slotFor(side), ())
-    case Msg.Close(side) => binding.remove(model, slotFor(side))
+    case Msg.Add =>
+      val id = model.nextId
+      binding.init(model.copy(cards = model.cards :+ id, nextId = Math.addExact(id, 1)), Slots.workspaces, id, ())
+    case Msg.Open(id) if model.cards.contains(id) && !binding.isActive(model, Slots.workspaces, id) =>
+      binding.init(model, Slots.workspaces, id, ())
+    case Msg.Reset(id) if binding.isActive(model, Slots.workspaces, id) =>
+      binding.init(model, Slots.workspaces, id, ())
+    case Msg.Close(id) => binding.remove(model, Slots.workspaces, id)
+    case Msg.Remove(id) =>
+      binding.remove(model.copy(cards = model.cards.filterNot(_ == id)), Slots.workspaces, id)
     case _ => Transition.unchanged(model)
   }
 
   def view(model: Model, dispatch: Msg => Unit): ReactNode = {
-    def workspace(side: Side, title: String, number: String): ReactNode = {
-      val active = slotFor(side).model(model.workspaces).isDefined
+    def workspace(id: Int): ReactNode = {
+      val title = s"Workspace $id"
+      val active = binding.isActive(model, Slots.workspaces, id)
       section(className := "workspace", aria-"label" := title)(
         header(className := "workspace-heading")(
           div(className := "workspace-title")(
-            span(className := "workspace-number")(number), h2(title)
+            span(className := "workspace-number")(id.toString), h2(title)
           ),
           if (active) div(className := "workspace-actions")(
-            button(className := "text-button", onClick := (_ => dispatch(Msg.Reset(side))))("Reset workspace"),
-            button(className := "text-button close-button", onClick := (_ => dispatch(Msg.Close(side))))("Close")
+            button(className := "text-button", onClick := (_ => dispatch(Msg.Reset(id))))("Reset workspace"),
+            button(className := "text-button close-button", onClick := (_ => dispatch(Msg.Close(id))))("Close")
           ) else span(className := "closed-badge")("Closed")
         ),
-        binding.view(model, slotFor(side), dispatch,
+        binding.view(model, Slots.workspaces, id, dispatch,
           div(className := "closed-workspace")(
             h3("Room for a fresh start."),
             p("Reopen with a new counter and a blank note."),
-            button(className := "primary-button", onClick := (_ => dispatch(Msg.Open(side))))("Open workspace")
+            button(className := "primary-button", onClick := (_ => dispatch(Msg.Open(id))))("Reopen"),
+            button(className := "text-button", onClick := (_ => dispatch(Msg.Remove(id))))("Remove")
           )
         )
-      )
+      ).withKey(id.toString)
     }
     div(className := "app-shell")(
       header(className := "page-heading")(
         p(className := "eyebrow")("SCALAFUI / INTERACTIVE EXAMPLE"),
-        h1("One feature. Two workspaces."),
-        p(className := "intro")("The same building blocks, with a life of their own. Try one side, then the other.")
+        h1("One feature. More workspaces."),
+        p(className := "intro")("Add workspaces, give each its own counter and note, then close or start them fresh.")
       ),
-      div(className := "workspaces")(
-        workspace(Side.Left, "Left workspace", "01"),
-        workspace(Side.Right, "Right workspace", "02")
-      ),
+      button(className := "primary-button add-workspace", onClick := (_ => dispatch(Msg.Add)))("Add workspace"),
+      div(className := "workspaces")(model.cards.map(workspace)*),
       section(className := "try-it", aria-"label" := "Things to try")(
-        div(h3("01 / Make it yours"), p("Count on the left. Write on the right. Each workspace keeps its own state.")),
-        div(h3("02 / Change the view"), p("Start auto +1 on both sides. Stop one, or switch its note view; the other keeps counting.")),
-        div(h3("03 / Start fresh"), p("Click +1 after 3s, then reset or close that workspace. The old result won’t change the new one."))
+        div(h3("01 / Make it yours"), p("Add a workspace. Count and write independently in each card.")),
+        div(h3("02 / Change the view"), p("Start auto +1 in several cards. Stop one, or switch its note view; the others keep counting.")),
+        div(h3("03 / Start fresh"), p("Click +1 after 3s, close and reopen that workspace. The old result won’t change it. Close and remove cards you no longer need."))
       ),
       footer("Closing or resetting stops auto increment. A delayed +1 keeps running, but its old result is ignored.")
     )

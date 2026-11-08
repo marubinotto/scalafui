@@ -95,7 +95,7 @@ Run `yarn` and `yarn dev` in the example directory. In a second terminal, start
 | [Hello World](src/main/scala/Main.scala) | `.` | `~fastLinkJS` | Model/View/Update |
 | [ToDo](examples/todo/src/main/scala/todo/Main.scala) | `examples/todo` | `~exampleTodo/fastLinkJS` | TodoMVC |
 | [Multipage](examples/multipage/src/main/scala/multipage/Main.scala) | `examples/multipage` | `~exampleMultipage/fastLinkJS` | Routing, HTTP, debounced search |
-| [Feature Workspace](examples/feature-workspace/README.md) | `examples/feature-workspace` | `~exampleFeatureWorkspace/fastLinkJS` | Independent slots, nesting, outputs, async results |
+| [Feature Workspace](examples/feature-workspace/README.md) | `examples/feature-workspace` | `~exampleFeatureWorkspace/fastLinkJS` | Dynamic collections, nesting, outputs, async results |
 | [Stopwatch](examples/stopwatch/src/main/scala/stopwatch/Main.scala) | `examples/stopwatch` | `~exampleStopwatch/fastLinkJS` | Subscriptions |
 | [fuidungeon](examples/fuidungeon/README.md) | `examples/fuidungeon` | `~exampleFuidungeon/fastLinkJS` | Dungeon RPG with immutable state and random initialization |
 
@@ -377,7 +377,8 @@ a part of the application has its own state transitions or work to manage.
 - A **FeatureSlots** group declares named logical slots with `slot(feature)`. Each slot
   holds at most one active instance of its registered Feature; registering the same
   Feature twice gives two independent slots. Slots identify places in the parent
-  state, not positions in the DOM.
+  state, not positions in the DOM. `collectionSlot[K](feature)` registers a family
+  of instances identified by keys, for dynamic tabs, windows, or editors.
 - A **policy** describes coexistence separately from registration. Children coexist
   by default. Each `exclusive(a, b, ...)` group permits at most one active member;
   different groups can be active simultaneously.
@@ -587,6 +588,60 @@ binding.init(model, Slots.first, firstInput)
 Prefer `FeatureBinding.init` for parent integration. The lower-level
 `FeatureSlots.init(state, child, input, policy)` returns a set transition with
 initial outputs.
+
+### Dynamic collections of a feature
+
+Register one collection and initialize instances by key. Only the key type needs
+an explicit type argument; input, model, message, and output types are inferred:
+
+```scala
+object Windows extends FeatureSlots[Unit] {
+  val editors = collectionSlot[String](Editor.feature)
+}
+// With a binding for Windows:
+binding.init(model, Windows.editors, "draft-1", editorInput)
+binding.model(model, Windows.editors, "draft-1") // Option[Editor.Model]
+binding.isActive(model, Windows.editors, "draft-1")
+binding.message(model, Windows.editors, "draft-1", editorMessage)
+binding.send(model, Windows.editors, "draft-1", editorMessage)
+binding.view(model, Windows.editors, "draft-1", dispatch, div())
+binding.remove(model, Windows.editors, "draft-1")
+binding.clear(model, Windows.editors) // just this collection
+```
+
+A collection exposes `model(state, key)`, `event(state, key, msg)`, and
+`keys(state)`. Active keys are returned in insertion order. Updating or
+reinitializing an active key preserves its position; removing and reopening it
+appends it. Applications can keep their own display order independently.
+Match `case Windows.editors.output(key, value) => ...` in the binding's output
+handler to identify the emitting instance, including outputs from initialization.
+
+Keys use equality and hashing and must remain stable. Their string representations
+are never used for event, React, subscription, or debounce identity. Use the
+identity of the window/editor as its key, even if its displayed content changes.
+
+Initializing an existing key replaces that instance with a fresh visit. Captured
+messages, view callbacks, and command results from its previous visit are ignored,
+including after remove, collection clear, or whole-group clear. Commands themselves
+are not cancelled. Each instance gets independent subscription/debounce scopes and
+a React boundary; ordinary updates and sibling reordering retain local React state.
+Inactive keys return `None`/`false`, `send` returns `Cmd.none`, and `view` uses its
+lazy fallback. Removing an absent key is harmless.
+
+Collections always coexist and cannot participate in `exclusive` groups. For
+context-aware parents, pass context as the last argument to `init` and `view`,
+just as with a single slot. The lower-level operations are
+`Windows.init(state, collection, key, input, context)` and
+`Windows.view(state, collection, key, dispatch, empty, context)`; no policy is
+needed for collection initialization. Unit context has overloads omitting context.
+
+Registration is stable; active instances and generation counters live in `State`.
+Use `clear` rather than replacing live state with `empty` to preserve stale-message
+protection. Removed keys are not retained as generation tombstones: a counter per
+collection distinguishes subsequent visits.
+
+The [Feature Workspace example](examples/feature-workspace/README.md) combines a
+dynamic collection of workspaces with fixed and exclusive slots inside each one.
 
 ### Multiple independent exclusive groups
 

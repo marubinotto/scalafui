@@ -12,28 +12,28 @@ class WorkspaceSpec extends AsyncFunSuite {
   override implicit def executionContext: scala.concurrent.ExecutionContext =
     org.scalajs.macrotaskexecutor.MacrotaskExecutor
 
-  private val left = Main.Side.Left
-  private val right = Main.Side.Right
+  private val left = 1
+  private val right = 2
 
   private def initial: Main.Model = Main.init(new URL("https://example.test/")).model
-  private def workspace(model: Main.Model, side: Main.Side = left): Workspace.Model =
-    Main.slotFor(side).model(model.workspaces).get
-  private def counter(model: Main.Model, side: Main.Side = left): Counter.Model =
+  private def workspace(model: Main.Model, side: Int = left): Workspace.Model =
+    Main.Slots.workspaces.model(model.workspaces, side).get
+  private def counter(model: Main.Model, side: Int = left): Counter.Model =
     Workspace.Slots.counter.model(workspace(model, side).children).get
   private def step(model: Main.Model, msg: Main.Msg): Main.Model = Main.program.update(msg, model)._1
 
-  private def workspaceEvent(model: Main.Model, side: Main.Side, msg: Workspace.Msg): Main.Msg =
-    Main.Msg.WorkspaceEvent(Main.slotFor(side).event(model.workspaces, msg).get)
+  private def workspaceEvent(model: Main.Model, side: Int, msg: Workspace.Msg): Main.Msg =
+    Main.Msg.WorkspaceEvent(Main.Slots.workspaces.event(model.workspaces, side, msg).get)
 
-  private def sendWorkspace(model: Main.Model, msg: Workspace.Msg, side: Main.Side = left): Main.Model =
+  private def sendWorkspace(model: Main.Model, msg: Workspace.Msg, side: Int = left): Main.Model =
     step(model, workspaceEvent(model, side, msg))
 
-  private def sendCounter(model: Main.Model, msg: Counter.Msg, side: Main.Side = left): (Main.Model, Cmd[Main.Msg]) = {
+  private def sendCounter(model: Main.Model, msg: Counter.Msg, side: Int = left): (Main.Model, Cmd[Main.Msg]) = {
     val child = Workspace.Slots.counter.event(workspace(model, side).children, msg).get
     Main.program.update(workspaceEvent(model, side, Workspace.Msg.ChildEvent(child)), model)
   }
 
-  private def edit(model: Main.Model, text: String, side: Main.Side = left): Main.Model = {
+  private def edit(model: Main.Model, text: String, side: Int = left): Main.Model = {
     val child = Workspace.Slots.editor.event(workspace(model, side).children, NoteEditor.Msg.Changed(text)).get
     sendWorkspace(model, Workspace.Msg.ChildEvent(child), side)
   }
@@ -118,7 +118,7 @@ class WorkspaceSpec extends AsyncFunSuite {
     }
   }
 
-  test("the same Workspace feature has independent counters and notes in two slots") {
+  test("the same Workspace feature has independent counters and notes in two collection instances") {
     val counted = sendCounter(initial, Counter.Msg.Increment)._1
     val edited = edit(counted, "Right-hand note", right)
     assert(counter(edited).value == 1)
@@ -163,7 +163,7 @@ class WorkspaceSpec extends AsyncFunSuite {
     }
     checkFresh(step(bothEdited, Main.Msg.Reset(left)))
     val closed = step(bothEdited, Main.Msg.Close(left))
-    assert(Main.Slots.left.model(closed.workspaces).isEmpty)
+    assert(Main.Slots.workspaces.model(closed.workspaces, left).isEmpty)
     checkFresh(step(closed, Main.Msg.Open(left)))
     succeed
   }
@@ -209,11 +209,42 @@ class WorkspaceSpec extends AsyncFunSuite {
           case _ => step(step(bothPending, Main.Msg.Close(left)), Main.Msg.Open(left))
         }
       }.flatMap { result =>
-        if (operation == "close") assert(Main.Slots.left.model(result.workspaces).isEmpty)
+        if (operation == "close") assert(Main.Slots.workspaces.model(result.workspaces, left).isEmpty)
         else assert(counter(result) == Counter.Model())
         assert(counter(result, right) == Counter.Model(pending = true))
         finishAfter(rightCmd)(result)
       }.map { result => assert(counter(result, right) == Counter.Model(value = 1)) }.unsafeToFuture()
     }
   }
+  test("workspaces can be added, closed, reopened and removed without reusing card IDs") {
+    val added = step(initial, Main.Msg.Add)
+    assert(added.cards == Vector(1, 2, 3))
+    assert(counter(added, 3).value == 0)
+    val edited = edit(added, "keep me", 2)
+    val closed = step(edited, Main.Msg.Close(3))
+    assert(closed.cards == edited.cards)
+    assert(!Main.binding.isActive(closed, Main.Slots.workspaces, 3))
+    val reopened = step(closed, Main.Msg.Open(3))
+    assert(counter(reopened, 3).value == 0)
+    val removed = step(reopened, Main.Msg.Remove(3))
+    assert(removed.cards == Vector(1, 2))
+    assert(!Main.binding.isActive(removed, Main.Slots.workspaces, 3))
+    assert(workspace(removed, 2).note == "keep me")
+    val next = step(removed, Main.Msg.Add)
+    assert(next.cards == Vector(1, 2, 4))
+    assert(!Main.binding.isActive(step(next, Main.Msg.Open(3)), Main.Slots.workspaces, 3))
+  }
+
+  test("removing a dynamically added workspace rejects its pending nested command") {
+    val added = step(initial, Main.Msg.Add)
+    val (pending, cmd) = sendCounter(added, Counter.Msg.AddLater, 3)
+    finishAfter(cmd) {
+      step(step(pending, Main.Msg.Remove(3)), Main.Msg.Add)
+    }.map { result =>
+      assert(result.cards == Vector(1, 2, 4))
+      assert(counter(result, 4).value == 0)
+      assert(counter(result, 1).value == 0)
+    }.unsafeToFuture()
+  }
+
 }

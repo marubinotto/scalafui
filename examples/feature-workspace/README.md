@@ -1,16 +1,17 @@
 # Feature Workspace
 
-One `Workspace` feature, registered twice. Each workspace contains its own counter
-and a pair of mutually exclusive note views. Everything runs in one Runtime.
+One `Workspace` feature, registered once with `collectionSlot[Int]`. Add and
+remove instances dynamically; each has its own counter and mutually exclusive
+note views. Everything runs in one Runtime.
 
 ```text
 App (FeatureProgram)
-├─ left: Workspace.feature
-│  ├─ counter: Counter
-│  └─ editor: NoteEditor ↔ preview: NotePreview
-└─ right: Workspace.feature
-   ├─ counter: Counter
-   └─ editor: NoteEditor ↔ preview: NotePreview
+└─ workspaces: collectionSlot[Int](Workspace.feature)
+   ├─ 1: Workspace
+   ├─ 2: Workspace
+   └─ … additional workspaces
+      ├─ counter: Counter
+      └─ editor: NoteEditor ↔ preview: NotePreview
 ```
 
 ## Run
@@ -38,8 +39,8 @@ sbt 'exampleFeatureWorkspace/test'
 
 ## Things to try
 
-1. Increment the left counter and write a note on the right. The two registrations
-   of the same feature have independent state.
+1. Start with two workspaces, then use **Add workspace** to create more.
+   Count and write different notes in each; all instances keep independent state.
 2. Switch a note from Edit to Preview and back. These two slots are exclusive;
    the counter coexists with either. The editor emits `TextChanged` outputs,
    and Workspace retains the text and supplies it to the next view as input.
@@ -51,22 +52,29 @@ sbt 'exampleFeatureWorkspace/test'
    note and Edit mode. The old result cannot reach its descendants. The other
    workspace is unaffected.
 
-5. Start auto +1 on both counters. Each adds one every second using the same
-   local subscription ID, `tick`. Stop one: the other continues. Switching note
+5. Start auto +1 on several counters. Each adds one every second using the same
+   local subscription ID, `tick`. Stop one: the others continue. Switching note
    views also leaves auto increment running.
 6. Reset a counter or close/reset its workspace while auto increment is on.
    Its subscription stops; reopening starts with auto increment off. Start it
    again to create a fresh subscription, without affecting the other workspace.
 
+7. Close a workspace and choose **Reopen**. Its card keeps the same ID but the
+   feature starts a fresh visit, with a blank note and a zero counter.
+8. Close a workspace and choose **Remove** to remove its card too. Add another:
+   IDs increase rather than being reused. Other workspaces keep their state.
+   Remove all cards and add a new one to start again.
+
 **Closing or resetting stops subscriptions but does not cancel running commands.** Commands finish, but
 FeatureSlots ignores results addressed to an earlier visit. Counter reset uses
 `binding.init`, not a value-only reset; closing uses `binding.remove`, preserving
-slot generation history. Existing state is never reset to `Slots.empty`.
+generation history. Existing state is never reset to `Slots.empty`.
 
 ## Code guide
 
-- `Main.scala`: two slots for the same composed Workspace, independent coexistence,
-  open/close/reset controls, and the single browser Runtime.
+- `Main.scala`: one collection slot for the composed Workspace, add/close/reopen/
+  reset/remove controls, and the single browser Runtime. The parent retains card
+  IDs and display order separately from the active collection instances.
 - `Workspace.scala`: nested slots, an explicit exclusive policy, child output
   handling and composition with `withFeatures` before outer registration.
 - `Counter.scala`: immediate updates, a three-second `Cmd`, and an optional

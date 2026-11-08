@@ -64,6 +64,7 @@ abstract class FeatureSlots[Context] {
 
   // Type erasure stays here. Child identity is checked before payload/model casts.
   private trait Entry {
+    def subscriptions(generation: Long, context: Context): Sub[Event]
     def model: Any
     def update(
         event: Event,
@@ -123,11 +124,17 @@ abstract class FeatureSlots[Context] {
           state.generations.updated(child, generation),
           state.entries.updated(child, entry(change.model))
         ),
-        change.cmd.map(msg => new Event(generation, child, msg)),
+        change.cmd
+          .mapDebounceKeys(FeatureSlots.InstanceScope(viewId, generation).encode)
+          .map(msg => new Event(generation, child, msg)),
         change.outputs.map(out => new Output(child, out))
       )
 
     private def entry(value: M): Entry = new Entry {
+      def subscriptions(generation: Long, context: Context): Sub[Event] =
+        feature.subscriptions(value, context)
+          .mapIds(FeatureSlots.InstanceScope(viewId, generation).encode)
+          .map(msg => new Event(generation, child, msg))
       def model: Any = value
       def update(event: Event, state: State, context: Context) =
         transition(
@@ -147,6 +154,15 @@ abstract class FeatureSlots[Context] {
         ).withKey(s"$viewId:$generation")
     }
   }
+
+  /** Collect sources from active instances, independently of view placement. */
+  final def subscriptions(state: State, context: Context): Sub[Event] =
+    state.entries.foldLeft[Sub[Event]](Sub.Empty) { case (acc, (child, entry)) =>
+      acc.combine(entry.subscriptions(state.generations(child), context))
+    }
+
+  final def subscriptions(state: State)(using unit: Unit =:= Context): Sub[Event] =
+    subscriptions(state, unit(()))
 
   final def slot[I, M, E, O](
       feature: Feature[I, Context, M, E, O]
@@ -303,6 +319,11 @@ abstract class FeatureSlots[Context] {
 }
 
 object FeatureSlots {
+  private case class InstanceScope(slotId: Long, generation: Long) {
+    def encode(key: String): String =
+      s"@feature:$slotId:$generation:${key.length}:$key"
+  }
+
   // Allocated at registration, not during pure state transitions or rendering.
   // Shared across groups so their children can also be rendered as siblings.
   private var lastViewId = 0L

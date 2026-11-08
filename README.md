@@ -400,8 +400,8 @@ result retains both commands and both lists of outputs, in order. Message and
 output types may widen to accommodate the next transition. Commands are combined
 with `++`: this does not execute them or wait for one command to finish before
 another starts.
-Features do not declare subscriptions; the App declares them through Program or
-FeatureProgram.
+Features can declare subscriptions, which are composed through bindings into the
+App subscription declaration. Program and FeatureProgram also support App-owned sources.
 
 `Msg` describes internal events. `Out` describes events the owner should handle.
 For example, search can output `OpenWork(id)` without knowing whether its owner
@@ -631,6 +631,45 @@ Both capture the instance generation when called, without updating the child or
 evaluating context. An inactive child yields `None` or `Cmd.none`. Messages use
 the normal binding/output handling and the context current when processed.
 
+### Feature subscriptions
+
+A Feature can own sources alongside its state and commands:
+
+```scala
+override def subscriptions(model: Model, context: Context): Sub[Msg] =
+  Sub.every(1.second, id = "tick").map(_ => Msg.Tick)
+```
+
+The default is `Sub.Empty`. With Unit context, `subscriptions(model)` is also
+available. `Feature.withoutContext` accepts an optional `subscriptions` callback.
+`withFeatures` combines the parent's own sources with all active children's
+sources, and `FeatureProgram` forwards the composition to the ordinary Program.
+App-owned subscriptions supplied to FeatureProgram are included once.
+
+Bindings project current Context on each declaration; `mapContextFrom` also
+adapts subscription context. Within one instance, retaining an ID retains the
+existing stream and its captured values. Include changing source parameters in
+the local ID when a context/model change should restart a source.
+
+FeatureSlots automatically scope subscription IDs and debounce keys by slot and
+generation at every parent-child boundary. The same local name can be reused by
+siblings, separate groups, ancestors and descendants. Reinitializing a child or
+ancestor changes its scoped IDs, stopping old subscriptions and starting new
+ones on the next Runtime reconciliation. Removing, clearing, or exclusively
+replacing a child removes its subscriptions. Hiding its view alone does not.
+
+The core exposes generic `Sub.mapIds` and `Cmd.mapDebounceKeys` operations;
+Runtime continues comparing plain strings. The `@feature:` prefix is reserved
+for internal scoped keys: do not use it for App-level IDs/keys. The encoded
+format is private, not a stable public identifier.
+
+Feature scoping does not cancel debounce waits or running commands when a child
+ends. Old and new generations have distinct keys, so a new generation does not
+replace the old generation's wait. Both may execute external effects; stale
+result messages are still ignored. Commands produced by a child's output handler
+belong to the owning parent and receive that parent's scope, if it is itself a
+registered child.
+
 ### App-level subscriptions
 
 The App can inspect child state to decide which sources to subscribe to. This
@@ -653,14 +692,15 @@ val keyboardProgram = program.copy(
 
 This source captures the current Work instance's address. Returning to Search
 removes its subscription from the App's declaration, so the existing Runtime
-stops the source. No feature-specific subscription machinery is involved.
+stops the source. This App-managed source remains supported alongside Feature-owned sources.
 
 Keeping the same subscription ID keeps its existing stream, including its captured
 destination. If you replace a child directly, use an App-managed visit/revision
 in the subscription ID to rebind to the new address, or remove the ID in one
 update before adding it again. Reconstructing a stream under the same ID does not
-change its destination. Subscription IDs and debounce keys remain shared within
-a Runtime; the App must choose non-conflicting names for independent operations.
+change its destination. App-managed subscription IDs and debounce keys remain shared within a Runtime;
+the App must choose non-conflicting names for these operations. Feature-owned
+sources and commands receive instance scopes automatically.
 
 ### Instance lifetime and asynchronous results
 
